@@ -1,0 +1,19 @@
+#!/bin/sh
+
+#SBATCH --mail-type=FAIL
+#SBATCH --mail-user=philb@umich.edu
+#SBATCH --output=/home/philb/tscoSims/out/%A_%a.out
+#SBATCH --error=/home/philb/tscoSims/out/%A_%a.err
+#SBATCH --partition=standard
+#SBATCH --account=philb0
+
+#SBATCH --job-name=tscoSims
+#SBATCH --time=0-04:00:00
+#SBATCH --mem-per-cpu=4000
+#SBATCH --array=1-600
+#SBATCH --cpus-per-task=1
+#SBATCH --nodes=1-1
+
+# NOTE: set my_computer = FALSE in run_sims.R before submitting.
+cd /home/philb/tscoSims
+Rscript --vanilla /home/philb/tscoSims/run_sims.R
