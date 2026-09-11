@@ -36,6 +36,7 @@ fxn_po <- function(dat, test_dat, levels_y) {
   )
 
   list(
+    fit_ok = TRUE,
     p_hat = p_hat,
     stat = tst["stat"],
     df = tst["df"],

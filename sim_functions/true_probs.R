@@ -27,7 +27,7 @@ upper_cumul_to_prob <- function(q) {
   p
 }
 
-check_prob_matrix <- function(p, tol = 1e-8) {
+check_prob_matrix <- function(p, tol = 1e-6) {
   if (any(!is.finite(p))) {
     stop("Non-finite probabilities.")
   }
@@ -38,7 +38,7 @@ check_prob_matrix <- function(p, tol = 1e-8) {
 
   rs <- rowSums(p)
 
-  if (any(abs(rs - 1) > 1e-6)) {
+  if (any(abs(rs - 1) > tol)) {
     stop("Probabilities do not sum to 1.")
   }
 

@@ -138,6 +138,20 @@ for (i in 1:n_sim) {
                         data_seed = data_seeds[i]))
   rm(curr_fit, curr_run_time)
 
+  # MR ----
+  begin2 <- Sys.time()
+  curr_fit <- fxn_mr(dat, test_dat, levels_y)
+  curr_run_time <- as.numeric(difftime(Sys.time(), begin2, units = "secs"))
+
+  all_scores <-
+    bind_rows(all_scores,
+              bind_cols(method = "mr",
+                        score_method(curr_fit, p_true_test, alpha),
+                        run_time = curr_run_time,
+                        sim_num = i,
+                        data_seed = data_seeds[i]))
+  rm(curr_fit, curr_run_time)
+
   # CPPO ----
   begin2 <- Sys.time()
   curr_fit <- fxn_cppo(dat, test_dat, levels_y)
@@ -187,9 +201,11 @@ if (!my_computer) {
 if (my_computer) {
   all_scores %>%
     group_by(method) %>%
-    summarize(n_ok = sum(fit_ok),
-              rejection = mean(reject[fit_ok]),
-              mean_rmse = mean(rmse[fit_ok]),
-              mean_kl = mean(kl[fit_ok]),
+    summarize(n_fit_ok = sum(fit_ok),
+              n_pred_ok = sum(pred_ok),
+              rejection = mean(reject[test_ok]),
+              mean_rps = mean(rps[pred_ok]),
+              mean_brier = mean(brier[pred_ok]),
+              median_kl = median(kl[pred_ok]),
               mean_run_time = mean(run_time))
 }

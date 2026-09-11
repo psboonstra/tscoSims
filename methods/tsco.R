@@ -45,6 +45,7 @@ fxn_tsco <- function(dat, test_dat, levels_y, cutoff_level, stage1, stage2) {
   )
 
   list(
+    fit_ok = TRUE,
     p_hat = p_hat,
     stat = tst["stat"],
     df = tst["df"],

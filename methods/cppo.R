@@ -60,6 +60,7 @@ fxn_cppo <- function(dat, test_dat, levels_y, G = c(0, 0, 0, 1)) {
   )
 
   list(
+    fit_ok = TRUE,
     p_hat = p_hat,
     stat = tst["stat"],
     df = tst["df"],
