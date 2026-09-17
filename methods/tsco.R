@@ -34,6 +34,19 @@ fxn_tsco <- function(dat, test_dat, levels_y, cutoff_level, stage1, stage2) {
     return(null_fit(fit_obj$warnings))
   }
 
+  # Since the 2026-09-17 package fix, tsco() warns and fits over the observed
+  # levels rather than erroring, so this replicate now stays in the denominator.
+  # `safe_fit` has already captured that warning; add the shared tag so all four
+  # methods are greppable the same way.
+  warnings <- c(
+    fit_obj$warnings,
+    unobserved_level_tag(
+      # Match the harness's method labels: "multinomial" is reported as "mr".
+      paste0("tsco_", sub("multinomial", "mr", stage1), sub("multinomial", "mr", stage2)),
+      unobserved_levels(dat, levels_y)
+    )
+  )
+
   tst <- tsco_lrt(fit_obj$fit)
 
   p_hat <- tryCatch(
@@ -50,7 +63,7 @@ fxn_tsco <- function(dat, test_dat, levels_y, cutoff_level, stage1, stage2) {
     stat = tst["stat"],
     df = tst["df"],
     p_value = tst["p"],
-    warnings = fit_obj$warnings
+    warnings = warnings
   )
 }
 

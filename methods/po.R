@@ -27,6 +27,14 @@ fxn_po <- function(dat, test_dat, levels_y) {
 
   tst <- vglm_lrt(fit_full$fit, fit_red$fit)
 
+  # PO keeps its single A coefficient when a level is unobserved, so df does not
+  # move, but the fit is still conditional on the observed support.
+  warnings <- c(
+    warnings,
+    unobserved_level_tag("po", unobserved_levels(dat, levels_y)),
+    df_shortfall_tag("po", tst["df"], 1L)
+  )
+
   p_hat <- tryCatch(
     align_prob(
       VGAM::predictvglm(fit_full$fit, newdata = test_dat, type = "response"),

@@ -18,6 +18,15 @@ fxn_mr <- function(dat, test_dat, levels_y) {
 
   tst <- vglm_lrt(fit_full$fit, fit_red$fit)
 
+  # VGAM drops an unobserved outcome level silently, so the A test quietly
+  # becomes a (K - 2)-df test of a different null. Tag both the cause and the
+  # consequence; the df column then says which hypothesis was tested.
+  warnings <- c(
+    warnings,
+    unobserved_level_tag("mr", unobserved_levels(dat, levels_y)),
+    df_shortfall_tag("mr", tst["df"], length(levels_y) - 1L)
+  )
+
   p_hat <- tryCatch(
     align_prob(
       VGAM::predictvglm(fit_full$fit, newdata = test_dat, type = "response"),
