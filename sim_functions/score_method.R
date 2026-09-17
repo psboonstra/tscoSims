@@ -19,22 +19,51 @@
 # mass across the whole scale. RPS, built on the cumulative probabilities, is
 # the ordinal analogue and is the primary accuracy metric here.
 
-prob_brier <- function(p_hat, p_true) {
-  mean(rowSums((as.matrix(p_hat) - as.matrix(p_true))^2))
+# WEIGHTS ON THE EVALUATION ROWS (added 2026-09-17)
+# -------------------------------------------------
+# Every metric here is an expectation over the covariate distribution. There
+# are two ways to take it:
+#
+#   Monte Carlo   draw a large test set from the covariate distribution and
+#                 average over its rows. Unbiased, with error O(1/sqrt(n_test)).
+#   Quadrature    evaluate on a fixed grid of covariate values and average
+#                 against their probability masses. Deterministic.
+#
+# Because p_true is known in closed form, the expectation over Y is already
+# done analytically inside every formula below (it is the sum over k), so the
+# only thing left to integrate is X -- and with A binary and W univariate
+# normal, that is a two-point sum times a Gauss-Hermite rule. The quadrature
+# route is converged to nine significant figures at ten nodes, against ~1% for
+# a 20,000-row Monte Carlo test set, so there is no reason to use sampling.
+#
+# `wt` carries the probability mass of each evaluation row and must sum to 1.
+# Passing wt = NULL reproduces the unweighted average exactly, so old calls are
+# unaffected.
+.eval_wt <- function(wt, n) {
+  if (is.null(wt)) return(rep(1 / n, n))
+  if (length(wt) != n) stop("wt must have one entry per evaluation row.")
+  wt
 }
 
-prob_rps <- function(p_hat, p_true) {
+prob_brier <- function(p_hat, p_true, wt = NULL) {
+  d <- (as.matrix(p_hat) - as.matrix(p_true))^2
+  sum(.eval_wt(wt, nrow(d)) * rowSums(d))
+}
+
+prob_rps <- function(p_hat, p_true, wt = NULL) {
   F_hat <- t(apply(as.matrix(p_hat), 1, cumsum))
   F_true <- t(apply(as.matrix(p_true), 1, cumsum))
 
   K <- ncol(F_true)
 
   # The final cumulative probability is 1 in both by construction.
-  mean(rowSums((F_hat[, -K, drop = FALSE] - F_true[, -K, drop = FALSE])^2))
+  d <- (F_hat[, -K, drop = FALSE] - F_true[, -K, drop = FALSE])^2
+  sum(.eval_wt(wt, nrow(d)) * rowSums(d))
 }
 
-prob_mae <- function(p_hat, p_true) {
-  mean(abs(as.matrix(p_hat) - as.matrix(p_true)))
+prob_mae <- function(p_hat, p_true, wt = NULL) {
+  d <- abs(as.matrix(p_hat) - as.matrix(p_true))
+  sum(.eval_wt(wt, nrow(d)) * rowMeans(d))
 }
 
 # No flooring of p_hat. A fit that puts zero probability on a category the
@@ -43,17 +72,17 @@ prob_mae <- function(p_hat, p_true) {
 # number that is a pure function of eps, which then dominates any average
 # taken over replicates. Summarise this column with the median and report how
 # often it is infinite.
-prob_kl <- function(p_hat, p_true) {
+prob_kl <- function(p_hat, p_true, wt = NULL) {
   p_hat <- as.matrix(p_hat)
   p_true <- as.matrix(p_true)
 
   r <- p_true * log(p_true / p_hat)
   r[p_true == 0] <- 0
 
-  mean(rowSums(r))
+  sum(.eval_wt(wt, nrow(r)) * rowSums(r))
 }
 
-score_method <- function(fit, p_true, alpha = 0.05) {
+score_method <- function(fit, p_true, alpha = 0.05, wt = NULL) {
 
   # Three distinct things can go wrong, and conflating them biases the
   # summaries: a model that fits and tests cleanly but fails to predict must
@@ -72,10 +101,10 @@ score_method <- function(fit, p_true, alpha = 0.05) {
     df = as.numeric(fit$df),
     stat = as.numeric(fit$stat),
     reject = test_ok && p_value < alpha,
-    brier = if (pred_ok) prob_brier(fit$p_hat, p_true) else NA_real_,
-    rps = if (pred_ok) prob_rps(fit$p_hat, p_true) else NA_real_,
-    mae = if (pred_ok) prob_mae(fit$p_hat, p_true) else NA_real_,
-    kl = if (pred_ok) prob_kl(fit$p_hat, p_true) else NA_real_,
+    brier = if (pred_ok) prob_brier(fit$p_hat, p_true, wt) else NA_real_,
+    rps = if (pred_ok) prob_rps(fit$p_hat, p_true, wt) else NA_real_,
+    mae = if (pred_ok) prob_mae(fit$p_hat, p_true, wt) else NA_real_,
+    kl = if (pred_ok) prob_kl(fit$p_hat, p_true, wt) else NA_real_,
     n_warnings = length(fit$warnings),
     warnings = paste(unique(fit$warnings), collapse = " | ")
   )

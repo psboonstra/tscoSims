@@ -6,7 +6,7 @@
 #   scenario_seq, n_seq, sims_per_scenario, reps_per_array
 
 if (!exists("scenario_seq")) {
-  scenario_seq <- c("null_po", "null_tsco", "po_alt", "cppo_alt", "tsco_pomr_alt")
+  scenario_seq <- c("null", "po_alt", "cppo_alt", "tsco_alt", "tsco_alt_stage2", "none_true")
 }
 if (!exists("n_seq")) {n_seq <- c(200, 500, 1000)}
 if (!exists("sims_per_scenario")) {sims_per_scenario <- 1000}
@@ -15,7 +15,7 @@ if (!exists("reps_per_array")) {reps_per_array <- 25}
 stopifnot(sims_per_scenario %% reps_per_array == 0)
 
 all_scenarios <-
-  expand.grid(
+  expand_grid(
     scenario = scenario_seq,
     n = n_seq,
     chunk = seq_len(sims_per_scenario / reps_per_array),
