@@ -61,6 +61,7 @@ source("aux_functions/safe_fit.R")
 source("aux_functions/align_prob.R")
 source("aux_functions/vglm_helpers.R")
 source("aux_functions/unobserved_levels.R")
+source("aux_functions/tsco_provenance.R")
 
 source("methods/po.R")
 source("methods/mr.R")
@@ -147,12 +148,34 @@ array_id_stats <-
 
 
 ## -----------------------------
+# Provenance of the tsco build that produced these numbers. Read once, not per
+# replicate, and attached to every row so a score file is self-describing after
+# it leaves this machine. See aux_functions/tsco_provenance.R for why the
+# version string alone is not enough and why the commit has to be stamped at
+# install time.
+tsco_prov <- tsco_provenance()
+
+if (is.na(tsco_prov$tsco_commit)) {
+  warning("tsco was installed without a recorded commit; ",
+          "results will not identify the source. See install_tsco_stamped().",
+          call. = FALSE)
+} else if (isTRUE(tsco_prov$tsco_dirty)) {
+  warning(glue("tsco was installed from a MODIFIED working tree at ",
+               "{tsco_prov$tsco_commit}; the commit alone does not identify it."),
+          call. = FALSE)
+}
+
+
+## -----------------------------
 all_scores <-
   all_scores |>
   mutate(scenario = scenario,
          n = n,
          array_id = array_id,
-         scenario_id = curr_scenario_id) |>
+         scenario_id = curr_scenario_id,
+         tsco_version = tsco_prov$tsco_version,
+         tsco_commit = tsco_prov$tsco_commit,
+         tsco_dirty = tsco_prov$tsco_dirty) |>
   select(array_id, scenario_id, scenario, n, sim_num, data_seed,
          method, everything())
 
