@@ -9,8 +9,19 @@ vglm_loglik <- function(fit) {
   if (length(out) != 1L || !is.finite(out)) NA_real_ else out
 }
 
+# Degrees of freedom of a VGAM fit = its RANK, not its coefficient count. The
+# two agree for a well-posed fit, but in a separated or otherwise
+# rank-deficient design -- the regime this study is about -- the coefficient
+# vector can be longer than the number of estimable parameters, and
+# `length(coef())` then overstates the df of any LRT built on it. The tsco
+# package made the same switch to `fit@rank` for the same reason. Falls back to
+# the count of finite coefficients if the slot is unusable.
 vglm_df <- function(fit) {
-  length(stats::coef(fit))
+  r <- tryCatch(methods::slot(fit, "rank"), error = function(e) NA_real_)
+  if (length(r) == 1L && is.finite(r) && r >= 0) {
+    return(as.numeric(r))
+  }
+  sum(is.finite(stats::coef(fit)))
 }
 
 vglm_lrt <- function(fit_full, fit_red) {

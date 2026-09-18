@@ -21,9 +21,16 @@
 # datasets, and the constrained MLE sits on the boundary of the CPPO parameter
 # space there (see methods/cppo.R and verification/FINDINGS.md section 3).
 #
-# Any analysis of the n = 200 rows therefore has to condition on this, and
-# reconstructing it afterwards from `data_seed` means re-drawing every dataset.
-# Recording it at run time costs one table() per replicate.
+# These columns exist so that an unconditional result can be EXPLAINED --
+# "CPPO's size is 0.069; the excess sits in the 11% of datasets with an empty
+# departure cell; the boundary reference distribution is the mechanism" -- and
+# reconstructing them afterwards from `data_seed` means re-drawing every
+# dataset. Recording them at run time costs one table() per replicate.
+#
+# They are diagnostics, not strata. Reported size, power and regret are
+# unconditional: emptiness is a function of the outcome and, under `cppo_alt`,
+# of the very effect under test, so splitting operating characteristics on it
+# conditions on a post-treatment variable. See process_main_results.R.
 #
 # The columns generalise past category 4 and past K = 6: they are counts of
 # empty cells and minima, plus the two counts for the departure category, which

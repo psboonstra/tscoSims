@@ -39,9 +39,14 @@
 # `wt` carries the probability mass of each evaluation row and must sum to 1.
 # Passing wt = NULL reproduces the unweighted average exactly, so old calls are
 # unaffected.
-.eval_wt <- function(wt, n) {
+.eval_wt <- function(wt, n, tol = 1e-8) {
   if (is.null(wt)) return(rep(1 / n, n))
   if (length(wt) != n) stop("wt must have one entry per evaluation row.")
+  # The documented contract, enforced: a quadrature weight that is NA,
+  # negative, or does not integrate to one silently rescales every metric.
+  if (!all(is.finite(wt))) stop("wt must be finite.")
+  if (any(wt < 0)) stop("wt must be non-negative.")
+  if (abs(sum(wt) - 1) > tol) stop(sprintf("wt must sum to 1 (got %.10f).", sum(wt)))
   wt
 }
 
@@ -76,7 +81,9 @@ prob_kl <- function(p_hat, p_true, wt = NULL) {
   p_hat <- as.matrix(p_hat)
   p_true <- as.matrix(p_true)
 
-  r <- p_true * log(p_true / p_hat)
+  # pred_ok already rejects p_hat < -tol; anything left below zero is rounding
+  # and is clamped so that the result is the intended +Inf, never NaN.
+  r <- p_true * log(p_true / pmax(p_hat, 0))
   r[p_true == 0] <- 0
 
   sum(.eval_wt(wt, nrow(r)) * rowSums(r))
@@ -88,7 +95,11 @@ score_method <- function(fit, p_true, alpha = 0.05, wt = NULL) {
   # summaries: a model that fits and tests cleanly but fails to predict must
   # still contribute to the rejection rate.
   fit_ok <- isTRUE(fit$fit_ok)
-  pred_ok <- is.matrix(fit$p_hat)
+  # A prediction is only a prediction if it is a valid probability matrix of
+  # the right shape and labelling; see valid_prob_matrix() in
+  # aux_functions/align_prob.R. `is.matrix()` alone let malformed output
+  # through (review issue 10).
+  pred_ok <- valid_prob_matrix(fit$p_hat, p_true)
 
   p_value <- as.numeric(fit$p_value)
   test_ok <- is.finite(p_value)
@@ -106,7 +117,15 @@ score_method <- function(fit, p_true, alpha = 0.05, wt = NULL) {
     mae = if (pred_ok) prob_mae(fit$p_hat, p_true, wt) else NA_real_,
     kl = if (pred_ok) prob_kl(fit$p_hat, p_true, wt) else NA_real_,
     n_warnings = length(fit$warnings),
-    warnings = paste(unique(fit$warnings), collapse = " | ")
+    warnings = paste(unique(fit$warnings), collapse = " | "),
+    # Optional fields. `boundary` is TRUE when the constrained MLE sits on the
+    # boundary of the model's parameter space, where the chi-square reference
+    # for the LRT is not justified; NA for methods that do not report it. It is
+    # a diagnostic flag for a decomposition of the rejection rate, NOT a filter
+    # on it -- see the policy note in methods/cppo.R. `engine` records which
+    # fitter produced the numbers.
+    boundary = if (is.null(fit$boundary)) NA else isTRUE(fit$boundary),
+    engine = if (is.null(fit$engine)) NA_character_ else as.character(fit$engine)
   )
 }
 

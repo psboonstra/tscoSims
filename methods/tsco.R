@@ -34,6 +34,12 @@ fxn_tsco <- function(dat, test_dat, levels_y, cutoff_level, stage1, stage2) {
     return(null_fit(fit_obj$warnings))
   }
 
+  # Both stage fits must have converged (rms::orm `$fail`, or VGAM iterations
+  # below the ceiling). See aux_functions/fit_converged.R and review issue 12.
+  if (!fit_converged(fit_obj$fit)) {
+    return(null_fit(c(fit_obj$warnings, "tsco: a stage fit did not converge")))
+  }
+
   # Since the 2026-09-17 package fix, tsco() warns and fits over the observed
   # levels rather than erroring, so this replicate now stays in the denominator.
   # `safe_fit` has already captured that warning; add the shared tag so all four

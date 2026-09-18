@@ -25,6 +25,14 @@ fxn_po <- function(dat, test_dat, levels_y) {
     return(null_fit(warnings))
   }
 
+  # A returned object is not a converged fit (review issue 12). Non-convergence
+  # is a failure of the fitter and is reported as one; in 300 surveyed draws at
+  # n = 200 it did not occur, so this guards a rare event rather than reshaping
+  # the denominator.
+  if (!fit_converged(fit_full$fit) || !fit_converged(fit_red$fit)) {
+    return(null_fit(c(warnings, "po: VGAM did not converge")))
+  }
+
   tst <- vglm_lrt(fit_full$fit, fit_red$fit)
 
   # PO keeps its single A coefficient when a level is unobserved, so df does not

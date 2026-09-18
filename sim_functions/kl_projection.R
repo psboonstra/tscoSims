@@ -47,10 +47,13 @@
 # So theta* is obtained by handing that weighted pseudo-dataset to the SAME
 # fitter the method itself uses -- VGAM for PO/MR/CPPO, tsco::tsco for TsCO,
 # all of which accept non-integer prior weights. Nothing about the model class
-# is re-derived here, so the projection is guaranteed to be onto the class the
-# method actually fits rather than onto our reading of it. (Both fitters are
-# scale-invariant in the weights, verified to 8e-16, so the weights need not be
-# counts of anything.)
+# is re-derived here, so the projection is onto the class the method actually
+# fits rather than onto our reading of it -- with one caveat: for CPPO the VGAM
+# specification does not enforce the class's own inequality constraint, so
+# kl_fit_cppo() additionally asserts that the population fit is valid and
+# interior (it is, for every scenario here). (Both fitters are scale-invariant
+# in the weights, verified to 8e-16, so the weights need not be counts of
+# anything.)
 #
 # X = (A, W) with A ~ Bernoulli(1/2) and W ~ N(0, 1), so the expectation over X
 # is a two-point sum times a Gauss-Hermite rule in W. Gauss-Hermite with m
@@ -172,12 +175,39 @@ kl_fit_mr <- function(pseudo, levels_y) {
     align_prob(VGAM::predictvglm(fit, newdata = nd, type = "response"), levels_y))
 }
 
-kl_fit_cppo <- function(pseudo, levels_y, G = cppo_G(levels_y)) {
+# CPPO is the one class whose VGAM specification does not enforce its own
+# parameter space: `constraints` fixes a linear span, and the ordering
+# inequality gamma >= alpha_{K-2} - alpha_{K-1} is not expressible there (see
+# methods/cppo.R). fxn_cppo() checks validity and falls back to a constrained
+# fitter; a projection that skipped that check could return A(M) for a point
+# OUTSIDE the class (review issue 3). So the same validity test is applied
+# here, and additionally the projection must be INTERIOR -- a population
+# pseudo-fit on the boundary would mean the class's best approximation is a
+# limit point, and A(M) would then be an infimum the constrained fitter must
+# compute rather than a VGAM optimum.
+#
+# Checked 2026-09-18 for all six scenarios at 40 nodes: every projection is
+# valid and interior, with the smallest slack 0.0201 on the exposed face under
+# `cppo_alt` (b2 = -0.1 against the admissibility bound of -0.120). The
+# assertion below turns that one-off check into a standing one.
+kl_fit_cppo <- function(pseudo, levels_y, G = cppo_G(levels_y), min_slack = 1e-3) {
   fit <- VGAM::vglm(
     Y ~ A + W, data = pseudo, weights = pseudo$wt,
     family = VGAM::cumulative(link = "logitlink", parallel = FALSE, reverse = FALSE),
     constraints = cppo_constraints(levels_y, G, with_A = TRUE)
   )
+
+  if (!cppo_vglm_valid(fit)) {
+    stop("kl_fit_cppo: the VGAM population projection is not a valid CPPO fit; ",
+         "A(M) must be computed with the constrained fitter instead.")
+  }
+  slack <- cppo_vglm_slack(fit, with_A = TRUE)
+  if (!all(is.finite(slack)) || any(slack < min_slack)) {
+    stop(sprintf(
+      "kl_fit_cppo: population projection is on or beyond the CPPO boundary (slack unexposed %.3g, exposed %.3g); A(M) is an infimum here and needs the constrained fitter.",
+      slack[["unexposed"]], slack[["exposed"]]))
+  }
+
   list(fit = fit, predict = function(nd)
     align_prob(VGAM::predictvglm(fit, newdata = nd, type = "response"), levels_y))
 }

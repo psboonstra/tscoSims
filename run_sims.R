@@ -61,6 +61,7 @@ source("aux_functions/safe_fit.R")
 source("aux_functions/align_prob.R")
 source("aux_functions/vglm_helpers.R")
 source("aux_functions/unobserved_levels.R")
+source("aux_functions/fit_converged.R")
 source("aux_functions/tsco_provenance.R")
 
 source("methods/po.R")

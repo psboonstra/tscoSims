@@ -41,6 +41,60 @@ all_scores <-
   # `warnings` is a character column with no missing values.
   mutate(warnings = ifelse(is.na(warnings), "", warnings))
 
+## -----------------------------
+# Record-level validation (review issue 9). Two kinds of check, treated
+# differently on purpose:
+#
+#   HARD STOP   things that corrupt every downstream number and can never be
+#               right: a (scenario, n, data_seed, method) appearing twice,
+#               which happens the moment an array is re-run and the old
+#               job file is left in out/. bind_rows() would double-count it
+#               silently.
+#   WARNING     things that describe an incomplete or exploratory run rather
+#               than a broken one: a seed missing some methods, a reference
+#               method absent, a cell with too few replicates. A three-method
+#               single-array debug run must still process; it just says so.
+dups <-
+  all_scores %>%
+  count(scenario, n, data_seed, method, name = "n_records") %>%
+  filter(n_records != 1L)
+
+if (nrow(dups) > 0L) {
+  print(dups)
+  stop("Duplicate (scenario, n, data_seed, method) records: ", nrow(dups),
+       " keys. A re-run array has probably left its old job file in out/.")
+}
+
+# Every seed should carry the same set of methods. A seed that does not is
+# reported, not dropped: the marginal summary is per method anyway, and the
+# paired summary already restricts itself to seeds where both members exist.
+methods_seen <- sort(unique(all_scores$method))
+incomplete <-
+  all_scores %>%
+  group_by(scenario, n, data_seed) %>%
+  summarize(n_methods = n_distinct(method), .groups = "drop") %>%
+  filter(n_methods != length(methods_seen))
+
+if (nrow(incomplete) > 0L) {
+  warning(sprintf(
+    "%d of %d seeds do not carry all %d methods (%s). Paired comparisons use only complete pairs.",
+    nrow(incomplete), n_distinct(paste(all_scores$scenario, all_scores$n, all_scores$data_seed)),
+    length(methods_seen), paste(methods_seen, collapse = ", ")), call. = FALSE)
+}
+
+have_reference <- reference_method %in% methods_seen
+if (!have_reference) {
+  warning(sprintf(
+    "Reference method `%s` is not in these results (methods: %s); the paired summary is skipped.",
+    reference_method, paste(methods_seen, collapse = ", ")), call. = FALSE)
+}
+
+# Small helpers so that an empty or singleton cell yields NA, never NaN or an
+# error. `x` is already subset to the rows that qualify.
+safe_mean <- function(x) if (length(x) == 0L) NA_real_ else mean(x)
+safe_prop_mcse <- function(p, m) if (is.na(p) || m < 1L) NA_real_ else sqrt(p * (1 - p) / m)
+safe_mean_mcse <- function(x) if (length(x) < 2L) NA_real_ else stats::sd(x) / sqrt(length(x))
+
 dir.create("summaries", recursive = TRUE, showWarnings = FALSE)
 saveRDS(all_scores, "summaries/all_scores.rds")
 
@@ -132,15 +186,15 @@ summ <-
     fit_ok_rate = mean(fit_ok),
     test_ok_rate = mean(test_ok),
     pred_ok_rate = mean(pred_ok),
-    rejection = mean(reject[test_ok]),
-    rejection_mcse = sqrt(rejection * (1 - rejection) / sum(test_ok)),
-    mean_rps = mean(rps[pred_ok]),
-    rps_mcse = sd(rps[pred_ok]) / sqrt(sum(pred_ok)),
-    mean_brier = mean(brier[pred_ok]),
-    brier_mcse = sd(brier[pred_ok]) / sqrt(sum(pred_ok)),
-    mean_mae = mean(mae[pred_ok]),
-    median_kl = median(kl[pred_ok]),
-    frac_kl_infinite = mean(!is.finite(kl[pred_ok])),
+    rejection = safe_mean(reject[test_ok]),
+    rejection_mcse = safe_prop_mcse(rejection, sum(test_ok)),
+    mean_rps = safe_mean(rps[pred_ok]),
+    rps_mcse = safe_mean_mcse(rps[pred_ok]),
+    mean_brier = safe_mean(brier[pred_ok]),
+    brier_mcse = safe_mean_mcse(brier[pred_ok]),
+    mean_mae = safe_mean(mae[pred_ok]),
+    median_kl = if (any(pred_ok)) median(kl[pred_ok]) else NA_real_,
+    frac_kl_infinite = safe_mean(!is.finite(kl[pred_ok])),
     .groups = "drop"
   )
 
@@ -172,12 +226,13 @@ decomp <-
     median_en_kl = median(en_kl),
     n_median_en_kl = first(n) * median(en_kl),
     frac_kl_infinite = mean(!is.finite(en_kl)),
-    mean_en_kl_finite = mean(en_kl[is.finite(en_kl)]),
-    en_kl_mcse = sd(en_kl[is.finite(en_kl)]) / sqrt(sum(is.finite(en_kl))),
-    n_mean_en_kl_finite = first(n) * mean(en_kl[is.finite(en_kl)]),
+    n_kl_finite = sum(is.finite(en_kl)),
+    mean_en_kl_finite = safe_mean(en_kl[is.finite(en_kl)]),
+    en_kl_mcse = safe_mean_mcse(en_kl[is.finite(en_kl)]),
+    n_mean_en_kl_finite = first(n) * mean_en_kl_finite,
     A_rps = first(A_rps),
     mean_excess_rps = mean(excess_rps),
-    excess_rps_mcse = sd(excess_rps) / sqrt(n()),
+    excess_rps_mcse = safe_mean_mcse(excess_rps),
     # Share of total RPS regret that is approximation rather than estimation.
     # Undefined when the total is ~0, so guarded.
     rps_approx_share = ifelse(mean(rps) > 0, first(A_rps) / mean(rps), NA_real_),
@@ -210,7 +265,8 @@ write.csv(decomp, "summaries/decomposition_results.csv", row.names = FALSE)
 # diff_mcse unchanged. This is the decomposition's payoff: it says whether a
 # method wins because its class fits the truth better or because it estimates
 # more cheaply, and those two have different implications for a referee.
-paired <-
+paired <- NULL
+if (have_reference) paired <-
   scored %>%
   filter(pred_ok) %>%
   select(scenario, n, data_seed, method, rps, brier, A_rps, A_brier) %>%
@@ -233,7 +289,7 @@ paired <-
   summarize(
     n_paired = n(),
     mean_diff = mean(diff),
-    diff_mcse = sd(diff) / sqrt(n_paired),
+    diff_mcse = safe_mean_mcse(diff),
     # Negative favours `method` over the reference.
     lower = mean_diff - 1.96 * diff_mcse,
     upper = mean_diff + 1.96 * diff_mcse,
@@ -243,8 +299,53 @@ paired <-
     .groups = "drop"
   )
 
-saveRDS(paired, "summaries/paired_results.rds")
-write.csv(paired, "summaries/paired_results.csv", row.names = FALSE)
+if (!is.null(paired)) {
+  saveRDS(paired, "summaries/paired_results.rds")
+  write.csv(paired, "summaries/paired_results.csv", row.names = FALSE)
+}
+
+
+## -----------------------------
+# Boundary decomposition (policy P3, settled 2026-09-18). For any method that
+# reports a `boundary` flag -- CPPO -- the HEADLINE rejection rate above is
+# unconditional: the conventional chi-square test applied to every replicate,
+# boundary or not, because that is what the procedure as practised does. This
+# table is the diagnostic decomposition underneath it:
+#
+#   boundary_rate            P(constrained MLE on the boundary), a design-cell
+#                            property of (scenario, n, method)
+#   rejection_interior       P(reject | interior), the rate a referee who
+#                            distrusts the chi-square reference at the boundary
+#                            will ask for. It is CONDITIONAL on a function of
+#                            the outcome and is labelled so; it is not the
+#                            method's size or power.
+#   rejection_boundary       P(reject | boundary), for completeness
+#
+# The boundary event is never used to drop replicates: under `cppo_alt` it is
+# driven by b2, the effect under test.
+if ("boundary" %in% names(scored)) {
+
+  bdry <-
+    scored %>%
+    filter(fit_ok, !is.na(boundary)) %>%
+    group_by(scenario, n, method) %>%
+    summarize(
+      n_fit = n(),
+      boundary_rate = mean(boundary),
+      boundary_mcse = sqrt(boundary_rate * (1 - boundary_rate) / n_fit),
+      n_interior = sum(!boundary & test_ok),
+      rejection_interior = safe_mean(reject[!boundary & test_ok]),
+      rejection_interior_mcse = safe_prop_mcse(rejection_interior, n_interior),
+      n_boundary = sum(boundary & test_ok),
+      rejection_boundary = safe_mean(reject[boundary & test_ok]),
+      # Which fitter produced the numbers.
+      share_direct = mean(engine == "direct", na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  saveRDS(bdry, "summaries/boundary_decomposition.rds")
+  write.csv(bdry, "summaries/boundary_decomposition.csv", row.names = FALSE)
+}
 
 
 ## -----------------------------
@@ -276,8 +377,15 @@ print(summ)
 cat("\n--- regret decomposition (KL for E_n, RPS for accuracy) ---\n")
 print(decomp)
 
-cat("\n--- paired vs '", reference_method, "' (negative favours the method) ---\n", sep = "")
-print(paired)
+if (!is.null(paired)) {
+  cat("\n--- paired vs '", reference_method, "' (negative favours the method) ---\n", sep = "")
+  print(paired)
+}
+
+if (exists("bdry")) {
+  cat("\n--- boundary decomposition (rejection_interior is CONDITIONAL; headline is in --- marginal ---) ---\n")
+  print(bdry)
+}
 
 cat("\n--- design sparsity (context for the n axis, NOT a stratification) ---\n")
 print(design)

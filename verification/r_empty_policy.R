@@ -16,7 +16,7 @@ nsim <- as.integer(Sys.getenv("NSIM", "400"))
 source("sim_functions/score_method.R"); source("sim_functions/true_probs.R")
 source("sim_functions/dataset_diagnostics.R"); source("sim_functions/method_setup.R")
 source("aux_functions/safe_fit.R"); source("aux_functions/align_prob.R")
-source("aux_functions/vglm_helpers.R"); source("aux_functions/unobserved_levels.R")
+source("aux_functions/vglm_helpers.R"); source("aux_functions/unobserved_levels.R"); source("aux_functions/fit_converged.R")
 source("methods/po.R"); source("methods/mr.R"); source("methods/cppo.R"); source("methods/tsco.R")
 
 method_list <- build_method_list(levels_y, cutoff_level)
@@ -24,6 +24,7 @@ methods_seq <- c("tsco_popo", "tsco_pomr", "po", "mr", "cppo")
 
 # A small test set: p_hat is not scored here, but the methods still want one.
 set.seed(master_seed + 999); test_dat <- make_covariates(50)
+p_true_test <- true_prob_scenario(test_dat, scenario)
 
 out <- NULL
 for (i in 1:nsim) {
@@ -38,6 +39,9 @@ for (i in 1:nsim) {
     out <- bind_rows(out, tibble(
       i = i, method = m,
       fit_ok = isTRUE(f$fit_ok),
+      pred_ok = valid_prob_matrix(f$p_hat, p_true_test),
+      boundary = if (is.null(f$boundary)) NA else isTRUE(f$boundary),
+      engine = if (is.null(f$engine)) NA_character_ else f$engine,
       df = as.numeric(f$df),
       stat = as.numeric(f$stat),
       p = as.numeric(f$p_value),

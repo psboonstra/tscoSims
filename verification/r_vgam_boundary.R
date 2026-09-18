@@ -64,7 +64,9 @@ for (i in seq_len(nrep)) {
     vgam_err = vgam_err, vgam_valid = vgam_valid,
     vgam_iter = as.numeric(v_iter), vgam_minmu = as.numeric(v_minmu),
     vgam_gamma = as.numeric(v_gamma), vgam_stat = as.numeric(v_stat),
-    direct_stat = d_stat, dist_bdry = full$dist_to_boundary,
+    # Distance to the nearer of the two faces. (Was `full$dist_to_boundary`,
+    # a field the fitter no longer returns -- review issue 4.)
+    direct_stat = d_stat, dist_bdry = min(full$slack_exposed, full$slack_unexposed),
     n_warn_vgam = length(c(ff$warnings, fr$warnings))
   )
   if (i %% 100 == 0) cat("  ...", i, "\n", file = stderr())

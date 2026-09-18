@@ -14,7 +14,7 @@ scenario <- Sys.getenv("SCENARIO", "null")
 source("sim_functions/score_method.R"); source("sim_functions/true_probs.R")
 source("sim_functions/dataset_diagnostics.R")
 source("aux_functions/safe_fit.R"); source("aux_functions/align_prob.R")
-source("aux_functions/vglm_helpers.R")
+source("aux_functions/vglm_helpers.R"); source("aux_functions/unobserved_levels.R"); source("aux_functions/fit_converged.R")
 source("methods/po.R"); source("methods/mr.R"); source("methods/cppo.R"); source("methods/tsco.R")
 G <- cppo_G(levels_y)
 
