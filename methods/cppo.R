@@ -60,14 +60,17 @@
 # constraint on the parameter space is a separate thing and the manuscript must
 # not conflate the two.)
 #
-# The harness records the boundary event in `boundary` and the distance to it
-# in `slack_min`, and returns the chi-square_2 p-value regardless. The headline
-# rejection rate is therefore the unconditional operating characteristic of
-# this defined procedure; the boundary rate and the rejection rate among
-# interior fits are reported alongside as the diagnostic decomposition.
-# Boundary replicates are never dropped: the event is a function of the
-# outcome and, under `cppo_alt`, of the very effect under test, so
-# conditioning on it would bias the comparison.
+# CPPO'S PRIMARY INFERENTIAL RESULT IS THE RAO SCORE TEST (decided
+# 2026-09-18; see the score-test section below). It is evaluated at the
+# reduced fit, which is always interior, so it does not inherit the boundary
+# problem. The LRT above is retained as the SENSITIVITY analysis in the `*_alt`
+# slots: the harness records the boundary event in `boundary` and the distance
+# to it in `slack_min`, and returns the chi-square_2 p-value regardless, so the
+# LRT's rejection rate is the unconditional operating characteristic of that
+# defined procedure, with the boundary rate and the rejection rate among
+# interior fits reported alongside. Boundary replicates are never dropped: the
+# event is a function of the outcome and, under `cppo_alt`, of the very effect
+# under test, so conditioning on it would bias the comparison.
 #
 # A fit that did NOT converge is a different matter: it is a failure of the
 # fitter, not a property of the model, and is returned as fit_ok = FALSE.
@@ -527,8 +530,8 @@ cppo_direct_fit <- function(X, Yidx, a_col, G, K, red = NULL) {
 ## gamma = 0; for association they use a 2-df Wald test (Section 3.2). The test
 ## here applies their Section 3.1 machinery to the association hypothesis
 ## instead -- null model PO in W, test (b1, b2) jointly -- which is in their
-## spirit but is not what they wrote for association. It is reported alongside
-## the LRT, not in place of it.
+## spirit but is not what they wrote for association. It is CPPO's PRIMARY
+## inferential result; the LRT is the sensitivity analysis.
 ##
 ## Power is a separate matter: the b2 score is essentially the observed minus
 ## expected count in the departure cell of the exposed arm, and when that cell
@@ -774,9 +777,19 @@ fxn_cppo <- function(dat, test_dat, levels_y,
       }
     }
   }
+  # THE SCORE TEST IS CPPO'S PRIMARY INFERENTIAL RESULT (decided 2026-09-18).
+  # It occupies the generic `stat / df / p_value` slots that every method's
+  # primary test uses, labeled `test = "score"`; the constrained-ML LRT with
+  # chi-square_2 calibration is the SENSITIVITY analysis and travels in the
+  # `*_alt` slots, labeled `test_alt = "lrt"`. The score test depends only on
+  # the reduced fit, so it is computed here, before any attempt at the full
+  # model, and is carried into EVERY return path below -- including the
+  # failures of the full fit, whose success it does not require.
   score_fields <- list(
-    stat_score = if (is.null(score)) NA_real_ else score$stat,
-    p_value_score = if (is.null(score)) NA_real_ else score$p,
+    test = "score",
+    stat = if (is.null(score)) NA_real_ else score$stat,
+    df = if (is.null(score)) NA_real_ else 2,
+    p_value = if (is.null(score)) NA_real_ else score$p,
     # Per-replicate diagnostics for the score test (review, 2026-09-18):
     # a finite statistic from a nearly singular efficient information matrix is
     # exactly the sparse-data failure to watch for.
@@ -786,6 +799,16 @@ fxn_cppo <- function(dat, test_dat, levels_y,
     score_nuis_per_n = if (is.null(score)) NA_real_ else score$max_nuisance_score_per_n
   )
   if (is.null(score)) warnings <- c(warnings, score_tag)
+
+  # A full-fit failure returns fit_ok = FALSE, no prediction and no LRT -- but
+  # keeps whatever score test exists.
+  fail_keep_score <- function(tags) {
+    out <- null_fit(tags)
+    out$stat <- NULL; out$df <- NULL; out$p_value <- NULL
+    out$test_alt <- "lrt"
+    out$stat_alt <- NA_real_; out$df_alt <- NA_real_; out$p_value_alt <- NA_real_
+    c(out, score_fields)
+  }
 
   if (!use_direct) {
     fit_full <- safe_fit(
@@ -844,9 +867,10 @@ fxn_cppo <- function(dat, test_dat, levels_y,
       return(c(list(
         fit_ok = TRUE,
         p_hat = p_hat,
-        stat = tst["stat"],
-        df = tst["df"],
-        p_value = tst["p"],
+        test_alt = "lrt",
+        stat_alt = unname(tst["stat"]),
+        df_alt = unname(tst["df"]),
+        p_value_alt = unname(tst["p"]),
         warnings = warnings,
         boundary = boundary,
         slack_min = slack_min,
@@ -857,7 +881,7 @@ fxn_cppo <- function(dat, test_dat, levels_y,
     # VGAM either errored, failed to converge, or produced a fit outside the
     # CPPO parameter space. Fall through to the constrained direct fit.
     if (!last_cutpoint_G) {
-      return(null_fit(c(
+      return(fail_keep_score(c(
         warnings,
         "cppo: VGAM fit invalid and G is not the last-cutpoint indicator, so no constrained refit is available"
       )))
@@ -868,13 +892,13 @@ fxn_cppo <- function(dat, test_dat, levels_y,
   }
 
   if (!last_cutpoint_G) {
-    return(null_fit(c(warnings, "cppo: direct engine requires G to be the last-cutpoint indicator")))
+    return(fail_keep_score(c(warnings, "cppo: direct engine requires G to be the last-cutpoint indicator")))
   }
 
   ## Constrained direct maximum likelihood for both models.
   Yidx <- match(as.character(dat$Y), levels_y)
   if (any(is.na(Yidx))) {
-    return(null_fit(c(warnings, "cppo: outcome levels do not match levels_y")))
+    return(fail_keep_score(c(warnings, "cppo: outcome levels do not match levels_y")))
   }
 
   X <- cbind(A = dat$A, W = dat$W)
@@ -888,14 +912,14 @@ fxn_cppo <- function(dat, test_dat, levels_y,
              error = function(e) NULL)
 
   if (is.null(full) || is.null(red)) {
-    return(null_fit(c(warnings, "cppo: direct fit failed")))
+    return(fail_keep_score(c(warnings, "cppo: direct fit failed")))
   }
 
   # A non-converged optimizer has not established the constrained maximum, so
   # neither the likelihood nor the predictions can be trusted. This is a
   # failure of the fit, reported as such (review issue 5).
   if (!full$converged || !red$converged) {
-    return(null_fit(c(warnings, sprintf(
+    return(fail_keep_score(c(warnings, sprintf(
       "cppo: direct optimizer did not converge (full: code %d, KKT %.2e, min obs prob %.2e; reduced: code %d, KKT %.2e, min obs prob %.2e)",
       full$optim_code, full$kkt_max_violation, full$min_obs_prob,
       red$optim_code, red$kkt_max_violation, red$min_obs_prob))))
@@ -926,9 +950,10 @@ fxn_cppo <- function(dat, test_dat, levels_y,
   c(list(
     fit_ok = TRUE,
     p_hat = p_hat,
-    stat = c(stat = stat),
-    df = c(df = df),
-    p_value = c(p = p),
+    test_alt = "lrt",
+    stat_alt = stat,
+    df_alt = df,
+    p_value_alt = p,
     warnings = warnings,
     boundary = full$on_boundary,
     slack_min = min(full$slack_exposed, full$slack_unexposed),

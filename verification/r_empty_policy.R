@@ -42,11 +42,17 @@ for (i in 1:nsim) {
       pred_ok = valid_prob_matrix(f$p_hat, p_true_test),
       boundary = if (is.null(f$boundary)) NA else isTRUE(f$boundary),
       engine = if (is.null(f$engine)) NA_character_ else f$engine,
+      test = if (is.null(f$test)) "lrt" else f$test,
       df = as.numeric(f$df),
       stat = as.numeric(f$stat),
       p = as.numeric(f$p_value),
       test_ok = is.finite(as.numeric(f$p_value)),
       reject = is.finite(as.numeric(f$p_value)) && as.numeric(f$p_value) < alpha,
+      # cppo's LRT (sensitivity analysis) lives in the alt slots
+      df_alt = if (is.null(f$df_alt)) NA_real_ else as.numeric(f$df_alt),
+      p_alt = if (is.null(f$p_value_alt)) NA_real_ else as.numeric(f$p_value_alt),
+      reject_alt = is.finite(if (is.null(f$p_value_alt)) NA_real_ else as.numeric(f$p_value_alt)) &&
+                   as.numeric(f$p_value_alt) < alpha,
       n_empty_levels = dg$n_empty_levels,
       cell_dep_exp = dg$cell_dep_exp,
       cell_dep_unexp = dg$cell_dep_unexp,

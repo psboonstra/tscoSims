@@ -15,7 +15,7 @@ suppressMessages({library(tsco); library(VGAM); library(dplyr); library(tibble)}
 options(warn = -1)
 levels_y <- as.character(0:5); K <- 6L; M <- K - 1L
 source("sim_functions/true_probs.R"); source("aux_functions/safe_fit.R")
-source("aux_functions/align_prob.R"); source("aux_functions/vglm_helpers.R"); source("aux_functions/unobserved_levels.R"); source("aux_functions/fit_converged.R")
+source("aux_functions/align_prob.R"); source("aux_functions/vglm_helpers.R")
 source("methods/cppo.R")
 G <- cppo_G(levels_y)
 nrep <- as.integer(Sys.getenv("NREP", "800"))

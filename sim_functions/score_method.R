@@ -4,7 +4,8 @@
 # `fit` is the standardized list returned by any methods/*.R function:
 #   fit_ok   (logical)      the model(s) were fit without error
 #   p_hat    (matrix or NA) predicted probabilities on test_dat
-#   stat, df, p_value       likelihood-ratio test of the A effect
+#   test, stat, df, p_value        the method's PRIMARY test of the A effect
+#   test_alt, stat_alt, df_alt, p_value_alt   an alternative test (optional)
 #   warnings (character)    warnings raised while fitting
 #
 # Because p_true is known, every metric below is an *excess risk* relative to
@@ -101,23 +102,34 @@ score_method <- function(fit, p_true, alpha = 0.05, wt = NULL) {
   # through (review issue 10).
   pred_ok <- valid_prob_matrix(fit$p_hat, p_true)
 
+  # PRIMARY test: whatever the method wrapper puts in stat / df / p_value,
+  # labeled by `test` ("lrt" for po, mr, tsco_*; "score" for cppo). The label
+  # travels with every row so that no summary can pool test types unknowingly.
   p_value <- as.numeric(fit$p_value)
   test_ok <- is.finite(p_value)
+  test <- if (is.null(fit$test)) "lrt" else as.character(fit$test)
 
-  # Optional second test (CPPO's Rao score test of b1 = b2 = 0, evaluated at
-  # the reduced fit and therefore free of the boundary problem). NA for methods
-  # that do not report one. Reported ALONGSIDE the LRT, never in place of it.
-  p_value_score <- if (is.null(fit$p_value_score)) NA_real_ else as.numeric(fit$p_value_score)
-  test_ok_score <- is.finite(p_value_score)
+  # ALTERNATIVE test, where a wrapper supplies one (cppo: the constrained-ML LRT
+  # with chi-square_2 calibration, as a sensitivity analysis). NA otherwise.
+  p_value_alt <- if (is.null(fit$p_value_alt)) NA_real_ else as.numeric(fit$p_value_alt)
+  test_ok_alt <- is.finite(p_value_alt)
+  test_alt <- if (is.null(fit$test_alt)) NA_character_ else as.character(fit$test_alt)
 
   tibble(
     fit_ok = fit_ok,
     test_ok = test_ok,
     pred_ok = pred_ok,
+    test = test,
     p_value = p_value,
     df = as.numeric(fit$df),
     stat = as.numeric(fit$stat),
     reject = test_ok && p_value < alpha,
+    test_alt = test_alt,
+    p_value_alt = p_value_alt,
+    df_alt = if (is.null(fit$df_alt)) NA_real_ else as.numeric(fit$df_alt),
+    stat_alt = if (is.null(fit$stat_alt)) NA_real_ else as.numeric(fit$stat_alt),
+    test_ok_alt = test_ok_alt,
+    reject_alt = test_ok_alt && p_value_alt < alpha,
     brier = if (pred_ok) prob_brier(fit$p_hat, p_true, wt) else NA_real_,
     rps = if (pred_ok) prob_rps(fit$p_hat, p_true, wt) else NA_real_,
     mae = if (pred_ok) prob_mae(fit$p_hat, p_true, wt) else NA_real_,
@@ -127,18 +139,14 @@ score_method <- function(fit, p_true, alpha = 0.05, wt = NULL) {
     # Optional fields. `boundary` is TRUE when the constrained MLE sits on the
     # boundary of the model's parameter space, where the chi-square reference
     # for the LRT is not justified; NA for methods that do not report it. It is
-    # a diagnostic flag for a decomposition of the rejection rate, NOT a filter
-    # on it -- see the policy note in methods/cppo.R. `engine` records which
-    # fitter produced the numbers.
+    # a diagnostic flag for a decomposition of the LRT (alt) rejection rate,
+    # NOT a filter on it -- see the policy note in methods/cppo.R. `engine`
+    # records which fitter produced the full fit.
     boundary = if (is.null(fit$boundary)) NA else isTRUE(fit$boundary),
     # Distance to the boundary on the log-odds scale (0 = on it), so that the
     # processor can classify at any threshold rather than one hidden cutoff.
     slack_min = if (is.null(fit$slack_min)) NA_real_ else as.numeric(fit$slack_min),
     engine = if (is.null(fit$engine)) NA_character_ else as.character(fit$engine),
-    stat_score = if (is.null(fit$stat_score)) NA_real_ else as.numeric(fit$stat_score),
-    p_value_score = p_value_score,
-    test_ok_score = test_ok_score,
-    reject_score = test_ok_score && p_value_score < alpha,
     # Score-test diagnostics: smallest eigenvalue and condition number of the
     # efficient information, condition number of the nuisance block, and the
     # per-observation nuisance score (should be ~0 at an interior reduced fit).

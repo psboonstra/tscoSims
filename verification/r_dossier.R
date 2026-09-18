@@ -87,6 +87,8 @@ for (i in ivals) {
   res <- fxn_cppo(dat, test_dat, levels_y)
   cat(sprintf("    fit_ok %s   stat %.4f   df %g   p %.4f   reject %s\n",
       res$fit_ok, res$stat, res$df, res$p_value, res$p_value < alpha))
+  cat(sprintf("    (primary = %s test above;  LRT (alt): stat %.4f  df %g  p %.4f  reject %s)\n",
+      res$test, res$stat_alt, res$df_alt, res$p_value_alt, res$p_value_alt < alpha))
   if (length(res$warnings)) for (w in res$warnings) cat(sprintf("    tag: %s\n", substr(w, 1, 100)))
 
   cat("  all four methods:\n")
@@ -96,8 +98,8 @@ for (i in ivals) {
                cppo = res)
   for (m in names(fits)) {
     s <- score_method(fits[[m]], p_true_test, alpha)
-    cat(sprintf("    %-10s fit_ok %-5s test_ok %-5s df %-4s stat %-8s p %-8s reject %s\n",
-        m, s$fit_ok, s$test_ok,
+    cat(sprintf("    %-10s [%-5s] fit_ok %-5s test_ok %-5s df %-4s stat %-8s p %-8s reject %s\n",
+        m, s$test, s$fit_ok, s$test_ok,
         if (is.na(s$df)) "NA" else format(s$df),
         if (is.na(s$stat)) "NA" else sprintf("%.3f", s$stat),
         if (is.na(s$p_value)) "NA" else sprintf("%.4f", s$p_value), s$reject))

@@ -147,7 +147,7 @@ for (i in 1:nsim) {
     gamma_new = full_new$gamma, gamma_old = full_old$gamma,
     t_new = t_new, t_old = t_old,
     fxn_fit_ok = res$fit_ok, fxn_boundary = res$boundary, fxn_engine = res$engine,
-    fxn_stat = as.numeric(res$stat), fxn_p = as.numeric(res$p_value)
+    fxn_stat = as.numeric(res$stat_alt), fxn_p = as.numeric(res$p_value_alt)   # the LRT (alt slots)
   ))
   if (i %% 25 == 0) cat("  ...", i, "/", nsim, "\n")
 }

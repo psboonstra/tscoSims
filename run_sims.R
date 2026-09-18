@@ -198,7 +198,7 @@ if (!my_computer) {
 ## -----------------------------
 if (my_computer) {
   all_scores |>
-    group_by(method) |>
+    group_by(method, test) |>
     summarize(n_fit_ok = sum(fit_ok),
               n_pred_ok = sum(pred_ok),
               p_reject = mean(reject),

@@ -23,7 +23,8 @@ suppressMessages({library(tsco); library(VGAM); library(dplyr); library(tibble)}
 options(warn = -1)
 
 levels_y <- as.character(0:5); K <- length(levels_y); M <- K - 1L
-master_seed <- 20260710; array_id <- 1L; alpha <- 0.05
+master_seed <- 20260710; alpha <- 0.05
+array_id <- as.integer(Sys.getenv("ARRAY", "1"))     # different ARRAY -> different seeds; pool for big runs
 n <- as.integer(Sys.getenv("N", "200"))
 scenario <- Sys.getenv("SCENARIO", "null")
 nsim <- as.integer(Sys.getenv("NSIM", "400"))
@@ -92,12 +93,20 @@ for (b in seq_len(B)) {
   scores[b, ] <- -.cppo_natural_grad(theta0, X0, Yb, 1L, 2L, G, M)
 }
 V_emp <- stats::cov(scores)
+# Entrywise standardized differences. Under normality of the scores the
+# sampling variance of a covariance entry is (I_ii I_jj + I_ij^2) / (B - 1);
+# the scores here are sums over n = 200 rows so that is a fair approximation.
+# With p(p+1)/2 = 36 distinct entries, max |z| < 4 is a bug-catching bound
+# (P(max of 36 |N(0,1)| > 4) ~ 0.002), not a loose smoke test.
+se_cov <- sqrt((outer(diag(I_exp), diag(I_exp)) + I_exp^2) / (B - 1))
+z_cov <- (V_emp - I_exp) / se_cov
 rel_I <- max(abs(V_emp - I_exp)) / max(abs(I_exp))
 mean_sc <- colMeans(scores) / sqrt(diag(I_exp) / B)     # standardized mean score
-cat(sprintf("  B = %d   max|Var_emp(S) - I_expected| / max|I| = %.3f   (MC error in a covariance at B = %d is ~%.3f)\n",
-    B, rel_I, B, sqrt(2 / B)))
-cat(sprintf("  standardized mean score, max |z| over %d components = %.2f\n", p, max(abs(mean_sc))))
-stopifnot("expected information disagrees with the empirical score covariance" = rel_I < 5 * sqrt(2 / B))
+cat(sprintf("  B = %d   max|Var_emp(S) - I| / max|I| = %.3f;  entrywise standardized: max |z| = %.2f over %d entries (bound 4)\n",
+    B, rel_I, max(abs(z_cov[upper.tri(z_cov, diag = TRUE)])), p * (p + 1) / 2))
+cat(sprintf("  standardized mean score, max |z| over %d components = %.2f (bound 4)\n", p, max(abs(mean_sc))))
+stopifnot("expected information disagrees with the empirical score covariance" =
+            max(abs(z_cov[upper.tri(z_cov, diag = TRUE)])) < 4)
 stopifnot("mean score not zero under the null" = max(abs(mean_sc)) < 4)
 cat(sprintf("  I_eff: min eigenvalue %.3f, condition number %.1f;  I_nuis condition number %.1f\n",
     sc0$min_eig_eff, sc0$cond_eff, sc0$cond_nuis))
@@ -108,6 +117,7 @@ S_full <- sc0$score
 stat_full <- drop(crossprod(S_full, solve(I_exp, S_full)))
 cat(sprintf("  Schur %.6f   full-vector %.6f   |diff| = %.2e   (nuisance score / n = %.2e)\n",
     sc0$stat, stat_full, abs(sc0$stat - stat_full), sc0$max_nuisance_score_per_n))
+stopifnot("Schur-complement and full-vector score statistics disagree" = abs(sc0$stat - stat_full) < 1e-6)
 
 ## Main loop
 out <- NULL
@@ -133,15 +143,15 @@ for (i in 1:nsim) {
       Hf <- matrix(0, length(sc$score), length(sc$score))
       for (k in seq_len(K)) { gk <- .cppo_natural_grad_rows(c(red$alpha, red$beta, 0, 0), X, rep(k, length(Yidx)), 1L, 2L, G, M)
         Hf <- Hf + crossprod(gk * sqrt(pmax(pr[, k], 0))) }
-      drop(crossprod(sc$score, solve(Hf, sc$score))) } else NA_real_,
+      tryCatch(drop(crossprod(sc$score, solve(Hf, sc$score))), error = function(e) NA_real_) } else NA_real_,
     score_obs_stat = sc_obs$stat, score_obs_p = sc_obs$p, red_boundary = red$on_boundary,
-    lrt_stat = as.numeric(res$stat), lrt_p = as.numeric(res$p_value),
+    lrt_stat = as.numeric(res$stat_alt), lrt_p = as.numeric(res$p_value_alt),
     boundary = isTRUE(res$boundary), fit_ok = res$fit_ok,
-    fxn_score_p = res$p_value_score
+    fxn_score_p = as.numeric(res$p_value), fxn_test = res$test
   ))
   if (i %% 100 == 0) cat("  ...", i, "/", nsim, "\n")
 }
-saveRDS(out, sprintf("verification/cppo_score_check_%s_n%d_%d.rds", scenario, n, nsim))
+saveRDS(out, sprintf("verification/cppo_score_check_%s_n%d_%d_a%d.rds", scenario, n, nsim, array_id))
 
 cat("\n=== 1. nuisance score at the reduced fit ===\n")
 cat(sprintf("  max |nuisance score| over draws: %.2e   (score components for b1, b2 are O(1)-O(10))\n", max(out$nuis)))
@@ -151,8 +161,11 @@ cat(sprintf("  max |nuisance score| among regular draws: %.2e\n", max(reg$nuis))
 cat(sprintf("  fxn_cppo()$p_value_score == direct call on regular draws: %s\n",
     isTRUE(all.equal(reg$fxn_score_p, reg$score_p))))
 
-cat(sprintf("  Schur vs full-vector statistic over regular draws: max |diff| = %.2e\n",
-    max(abs(reg$score_stat - reg$stat_fullvec), na.rm = TRUE)))
+schur_diff <- max(abs(reg$score_stat - reg$stat_fullvec), na.rm = TRUE)
+cat(sprintf("  Schur vs full-vector statistic over regular draws: max |diff| = %.2e  (bound 1e-4)\n", schur_diff))
+stopifnot("Schur-complement and full-vector forms disagree on some regular draw" = schur_diff < 1e-4)
+cat(sprintf("  fxn_cppo primary test label: %s\n", paste(unique(reg$fxn_test), collapse = ", ")))
+stopifnot("fxn_cppo primary test is not the score test" = all(reg$fxn_test == "score"))
 cat(sprintf("  I_eff min eigenvalue over draws: min %.3f, median %.3f;  condition number: median %.1f, max %.1f\n",
     min(reg$min_eig_eff), median(reg$min_eig_eff), median(reg$cond_eff), max(reg$cond_eff)))
 cat(sprintf("  I_nuis condition number: median %.1f, max %.1f;  score tests returned NA: %d\n",

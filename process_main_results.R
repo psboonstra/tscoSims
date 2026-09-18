@@ -193,6 +193,18 @@ if (is.finite(en_kl_min) && en_kl_min < -1e-10) {
        "Check the projection, the fit's class membership, and the quadrature grids.")
 }
 
+# Each method's PRIMARY test type must be one thing. `test` is carried on every
+# row ("lrt" for po, mr, tsco_*; "score" for cppo); a method with two types
+# means score files from incompatible code versions were pooled.
+test_types <-
+  scored %>%
+  group_by(method) %>%
+  summarize(n_types = n_distinct(test), types = paste(sort(unique(test)), collapse = "|"), .groups = "drop")
+if (any(test_types$n_types != 1L)) {
+  print(test_types)
+  stop("A method reports more than one primary test type; score files are from incompatible versions.")
+}
+
 saveRDS(scored, "summaries/all_scores_decomposed.rds")
 
 
@@ -210,8 +222,15 @@ saveRDS(scored, "summaries/all_scores_decomposed.rds")
 # characteristic of the rule "no test -> do not reject"; whether that is the
 # rule an analyst would follow is a modeling statement, so both it and the
 # conditional rate are given and the reader chooses with the failure rate in
-# view. With the convergence checks in place `p_no_test` is 0 in every cell
-# seen so far, so the two coincide -- but the labels are now honest.
+# view.
+#
+# WHICH TEST. `test` names each method's PRIMARY test: the LRT for po, mr and
+# tsco_*, and -- decided 2026-09-18 -- the efficient Rao score test for cppo,
+# because cppo's LRT has its full-model MLE on the boundary in most sparse
+# draws and its chi-square_2 calibration is not justified there. That LRT is
+# cppo's SENSITIVITY analysis and appears in the `*_alt` columns with its own
+# three-way outcome. A table that compares p_reject across methods therefore
+# compares each method's defensible test; the `test` column says which.
 #
 # KL is summarized by the median, since a single separated fit makes the mean
 # infinite.
@@ -223,18 +242,20 @@ summ <-
     fit_ok_rate = mean(fit_ok),
     test_ok_rate = mean(test_ok),
     pred_ok_rate = mean(pred_ok),
+    test = first(test),
     p_reject = mean(reject),
     p_retain = mean(test_ok & !reject),
     p_no_test = mean(!test_ok),
     rejection_given_test = safe_mean(reject[test_ok]),
     rejection_given_test_mcse = safe_prop_mcse(rejection_given_test, sum(test_ok)),
-    # Second test, where a method reports one (CPPO's Rao score test of
-    # b1 = b2 = 0 with expected information, evaluated at the reduced fit and
-    # therefore free of the boundary problem). Same three-way outcome. NA for
-    # methods without one. Reported ALONGSIDE the LRT, never in place of it.
-    p_reject_score = if (any(!is.na(p_value_score))) mean(reject_score) else NA_real_,
-    p_no_test_score = if (any(!is.na(p_value_score))) mean(!test_ok_score) else NA_real_,
-    rejection_given_test_score = if (any(test_ok_score)) safe_mean(reject_score[test_ok_score]) else NA_real_,
+    # Alternative test, where a method supplies one (cppo: the constrained-ML
+    # LRT with chi-square_2 calibration, as sensitivity analysis). Same
+    # three-way outcome, summing to one. NA for methods without one.
+    test_alt = if (all(is.na(test_alt))) NA_character_ else first(test_alt[!is.na(test_alt)]),
+    p_reject_alt = if (all(is.na(test_alt))) NA_real_ else mean(reject_alt),
+    p_retain_alt = if (all(is.na(test_alt))) NA_real_ else mean(test_ok_alt & !reject_alt),
+    p_no_test_alt = if (all(is.na(test_alt))) NA_real_ else mean(!test_ok_alt),
+    rejection_given_test_alt = if (any(test_ok_alt)) safe_mean(reject_alt[test_ok_alt]) else NA_real_,
     mean_rps = safe_mean(rps[pred_ok]),
     rps_mcse = safe_mean_mcse(rps[pred_ok]),
     mean_brier = safe_mean(brier[pred_ok]),
@@ -244,6 +265,13 @@ summ <-
     frac_kl_infinite = safe_mean(!is.finite(kl[pred_ok])),
     .groups = "drop"
   )
+
+stopifnot("primary three-way outcome does not sum to one" =
+            isTRUE(all.equal(summ$p_reject + summ$p_retain + summ$p_no_test, rep(1, nrow(summ)))))
+has_alt <- !is.na(summ$test_alt)
+stopifnot("alternative three-way outcome does not sum to one" =
+            isTRUE(all.equal((summ$p_reject_alt + summ$p_retain_alt + summ$p_no_test_alt)[has_alt],
+                             rep(1, sum(has_alt)))))
 
 saveRDS(summ, "summaries/summary_results.rds")
 write.csv(summ, "summaries/summary_results.csv", row.names = FALSE)
@@ -371,10 +399,11 @@ if (!is.null(paired)) {
 
 
 ## -----------------------------
-# Boundary decomposition (policy P3, settled 2026-09-18). For any method that
-# reports a `boundary` flag -- CPPO, i.e. constrained-ML CPPO with the 2-df LRT
-# and chi-square_2 calibration -- the HEADLINE `p_reject` above is
-# unconditional: that defined procedure applied to every replicate, boundary or
+# Boundary decomposition of CPPO's LRT (policy P3, settled 2026-09-18). The
+# boundary is a property of the FULL-model MLE, so it concerns the LRT -- now
+# cppo's alternative test in the `*_alt` columns -- and not the primary score
+# test, which never computes that MLE. `p_reject_alt` above is unconditional:
+# the LRT with chi-square_2 calibration applied to every replicate, boundary or
 # not. This table is the diagnostic decomposition underneath it:
 #
 #   boundary_rate            P(constrained MLE on the boundary), by the
@@ -384,13 +413,16 @@ if (!is.null(paired)) {
 #                            the same from the recorded `slack_min` at three
 #                            thresholds, applied identically to both engines,
 #                            so the rate is not hostage to one hidden cutoff
-#   rejection_given_test_interior
-#                            P(reject | test computed, interior). CONDITIONAL
-#                            on a function of the outcome and labeled so; it
-#                            is not the method's size or power.
-#   rejection_given_test_boundary
-#                            P(reject | test computed, boundary), for
+#   lrt_rejection_given_test_interior
+#                            P(LRT rejects | LRT computed, interior).
+#                            CONDITIONAL on a function of the outcome and
+#                            labeled so; it is not the method's size or power.
+#   lrt_rejection_given_test_boundary
+#                            P(LRT rejects | LRT computed, boundary), for
 #                            completeness
+#   score_p_reject_interior / _boundary
+#                            the primary score test's unconditional rejection
+#                            within the same split, for the contrast
 #
 # The boundary event is never used to drop replicates: under `cppo_alt` it is
 # driven by b2, the effect under test.
@@ -398,7 +430,7 @@ if ("boundary" %in% names(scored)) {
 
   bdry <-
     scored %>%
-    filter(fit_ok, !is.na(boundary)) %>%
+    filter(fit_ok, !is.na(boundary), test_alt %in% "lrt") %>%
     group_by(scenario, n, method) %>%
     summarize(
       n_fit = n(),
@@ -407,11 +439,13 @@ if ("boundary" %in% names(scored)) {
       boundary_rate_1e4 = safe_mean(slack_min[is.finite(slack_min)] < 1e-4),
       boundary_rate_1e3 = safe_mean(slack_min[is.finite(slack_min)] < 1e-3),
       boundary_rate_1e2 = safe_mean(slack_min[is.finite(slack_min)] < 1e-2),
-      n_interior = sum(!boundary & test_ok),
-      rejection_given_test_interior = safe_mean(reject[!boundary & test_ok]),
-      rejection_given_test_interior_mcse = safe_prop_mcse(rejection_given_test_interior, n_interior),
-      n_boundary = sum(boundary & test_ok),
-      rejection_given_test_boundary = safe_mean(reject[boundary & test_ok]),
+      n_interior = sum(!boundary & test_ok_alt),
+      lrt_rejection_given_test_interior = safe_mean(reject_alt[!boundary & test_ok_alt]),
+      lrt_rejection_given_test_interior_mcse = safe_prop_mcse(lrt_rejection_given_test_interior, n_interior),
+      n_boundary = sum(boundary & test_ok_alt),
+      lrt_rejection_given_test_boundary = safe_mean(reject_alt[boundary & test_ok_alt]),
+      score_p_reject_interior = safe_mean(reject[!boundary]),
+      score_p_reject_boundary = safe_mean(reject[boundary]),
       # Which fitter produced the numbers.
       share_direct = mean(engine == "direct", na.rm = TRUE),
       .groups = "drop"
@@ -419,6 +453,41 @@ if ("boundary" %in% names(scored)) {
 
   saveRDS(bdry, "summaries/boundary_decomposition.rds")
   write.csv(bdry, "summaries/boundary_decomposition.csv", row.names = FALSE)
+}
+
+
+## -----------------------------
+# Score-test diagnostics (review, 2026-09-18). The score test is CPPO's primary
+# result, and Peterson and Harrell (1990, Section 7) warn that score tests
+# misbehave with sparse cells and near-singular information. These columns say
+# whether that happened: availability, the efficient information's smallest
+# eigenvalue and condition number, the nuisance block's condition number, and
+# the per-observation nuisance score at the reduced fit against the reduced
+# optimizer's KKT tolerance of 1e-6.
+if ("score_min_eig_eff" %in% names(scored)) {
+  score_diag <-
+    scored %>%
+    filter(test == "score") %>%
+    group_by(scenario, n, method) %>%
+    summarize(
+      n_rep = n(),
+      score_available = mean(test_ok),
+      n_score = sum(test_ok),
+      min_eig_eff_min = if (n_score > 0) min(score_min_eig_eff, na.rm = TRUE) else NA_real_,
+      min_eig_eff_q05 = if (n_score > 0) unname(quantile(score_min_eig_eff, 0.05, na.rm = TRUE)) else NA_real_,
+      min_eig_eff_median = if (n_score > 0) median(score_min_eig_eff, na.rm = TRUE) else NA_real_,
+      cond_eff_median = if (n_score > 0) median(score_cond_eff, na.rm = TRUE) else NA_real_,
+      cond_eff_max = if (n_score > 0) max(score_cond_eff, na.rm = TRUE) else NA_real_,
+      cond_nuis_median = if (n_score > 0) median(score_cond_nuis, na.rm = TRUE) else NA_real_,
+      cond_nuis_max = if (n_score > 0) max(score_cond_nuis, na.rm = TRUE) else NA_real_,
+      nuis_per_n_max = if (n_score > 0) max(score_nuis_per_n, na.rm = TRUE) else NA_real_,
+      nuis_exceeds_kkt_tol = if (n_score > 0) mean(score_nuis_per_n > 1e-6, na.rm = TRUE) else NA_real_,
+      .groups = "drop"
+    )
+  if (nrow(score_diag) > 0L) {
+    saveRDS(score_diag, "summaries/score_diagnostics.rds")
+    write.csv(score_diag, "summaries/score_diagnostics.csv", row.names = FALSE)
+  }
 }
 
 
@@ -457,8 +526,13 @@ if (!is.null(paired)) {
 }
 
 if (exists("bdry")) {
-  cat("\n--- boundary decomposition (rejection_given_test_* are CONDITIONAL; headline p_reject is in --- marginal ---) ---\n")
+  cat("\n--- boundary decomposition of cppo's LRT (alt test); lrt_rejection_given_test_* are CONDITIONAL ---\n")
   print(bdry)
+}
+
+if (exists("score_diag") && nrow(score_diag) > 0L) {
+  cat("\n--- score-test diagnostics (primary test for cppo) ---\n")
+  print(score_diag)
 }
 
 cat("\n--- design sparsity (context for the n axis, NOT a stratification) ---\n")
