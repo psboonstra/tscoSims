@@ -1,0 +1,123 @@
+# Checks the CPPO Rao score test (methods/cppo.R, cppo_score_test) added
+# 2026-09-18.
+#
+#   NSIM=400 Rscript verification/r_cppo_score_check.R            # null, n = 200
+#   SCENARIO=cppo_alt N=1000 NSIM=100 Rscript verification/r_cppo_score_check.R
+#
+# What must hold:
+#   0. The observed information used by the test agrees with a direct
+#      second-difference Hessian of the nll (independent of the gradient code).
+#   1. Nuisance components of the score are ~0 at the reduced fit.
+#   2. Under the null, the score statistic is chi-square_2 to within Monte
+#      Carlo error, INCLUDING on draws where the LRT sits on the boundary.
+#   3. On interior draws at large n, score and LRT statistics agree (first-order
+#      equivalence); the gap shrinks with n.
+
+suppressMessages({library(tsco); library(VGAM); library(dplyr); library(tibble)})
+options(warn = -1)
+
+levels_y <- as.character(0:5); K <- length(levels_y); M <- K - 1L
+master_seed <- 20260710; array_id <- 1L; alpha <- 0.05
+n <- as.integer(Sys.getenv("N", "200"))
+scenario <- Sys.getenv("SCENARIO", "null")
+nsim <- as.integer(Sys.getenv("NSIM", "400"))
+
+source("sim_functions/score_method.R"); source("sim_functions/true_probs.R")
+source("sim_functions/dataset_diagnostics.R")
+source("aux_functions/safe_fit.R"); source("aux_functions/align_prob.R")
+source("aux_functions/vglm_helpers.R"); source("aux_functions/unobserved_levels.R")
+source("aux_functions/fit_converged.R")
+source("methods/cppo.R")
+G <- cppo_G(levels_y)
+set.seed(master_seed + 999); test_dat <- make_covariates(50)
+
+## 0. Information matrix against a direct second-difference Hessian of the nll
+cat("=== 0. observed information vs second differences of the nll ===\n")
+nll_nat <- function(theta, X, Yidx, a_col, w_cols, G, M) {
+  alpha <- theta[1:M]; beta_w <- theta[M + seq_along(w_cols)]
+  b1 <- theta[M + length(w_cols) + 1L]; b2 <- theta[M + length(w_cols) + 2L]
+  eta <- drop(X[, w_cols, drop = FALSE] %*% beta_w)
+  lin <- outer(-eta, alpha, "+") - outer(X[, a_col], b1 + b2 * G)
+  pr <- cppo_direct_probs_from_q(plogis(lin))
+  -sum(log(pmax(pr[cbind(seq_along(Yidx), Yidx)], 1e-300)))
+}
+set.seed(11); dat0 <- make_covariates(n)
+dat0$Y <- draw_ordinal(true_prob_scenario(dat0, scenario), levels_y = levels_y)
+Y0 <- match(as.character(dat0$Y), levels_y); X0 <- cbind(A = dat0$A, W = dat0$W)
+red0 <- po_direct_fit(X0[, "W", drop = FALSE], Y0, K)
+theta0 <- c(red0$alpha, red0$beta, 0, 0); p <- length(theta0)
+# Hessian from the gradient (what the test uses)
+h <- 1e-5 * pmax(1, abs(theta0)); Hg <- matrix(NA_real_, p, p)
+for (k in 1:p) { tp <- theta0; tp[k] <- tp[k] + h[k]; tm <- theta0; tm[k] <- tm[k] - h[k]
+  Hg[, k] <- (.cppo_natural_grad(tp, X0, Y0, 1L, 2L, G, M) - .cppo_natural_grad(tm, X0, Y0, 1L, 2L, G, M)) / (2 * h[k]) }
+Hg <- (Hg + t(Hg)) / 2
+# Hessian from second differences of the nll (independent of gradient code)
+h2 <- 1e-3 * pmax(1, abs(theta0)); Hn <- matrix(NA_real_, p, p)
+f0 <- nll_nat(theta0, X0, Y0, 1L, 2L, G, M)
+for (i in 1:p) for (j in 1:p) {
+  e_i <- e_j <- numeric(p); e_i[i] <- h2[i]; e_j[j] <- h2[j]
+  Hn[i, j] <- (nll_nat(theta0 + e_i + e_j, X0, Y0, 1L, 2L, G, M) - nll_nat(theta0 + e_i - e_j, X0, Y0, 1L, 2L, G, M) -
+               nll_nat(theta0 - e_i + e_j, X0, Y0, 1L, 2L, G, M) + nll_nat(theta0 - e_i - e_j, X0, Y0, 1L, 2L, G, M)) / (4 * h2[i] * h2[j])
+}
+rel <- max(abs(Hg - Hn)) / max(abs(Hn))
+cat(sprintf("  max |H_grad - H_nll| / max|H| = %.2e   (min eigenvalue of H: %.3f)\n", rel, min(eigen(Hg, symmetric = TRUE)$values)))
+# The 4-point second difference at h = 1e-3 carries ~1e-4 relative truncation
+# error itself; a wrong gradient would be O(1) off, so 1e-3 catches bugs.
+stopifnot("information matrix disagrees with second differences" = rel < 1e-3)
+
+## Main loop
+out <- NULL
+for (i in 1:nsim) {
+  set.seed(master_seed + array_id * 100000L + i)
+  dat <- make_covariates(n)
+  dat$Y <- draw_ordinal(true_prob_scenario(dat, scenario), levels_y = levels_y)
+  dg <- dataset_diagnostics(dat, levels_y)
+  Yidx <- match(as.character(dat$Y), levels_y); X <- cbind(A = dat$A, W = dat$W)
+
+  red <- po_direct_fit(X[, "W", drop = FALSE], Yidx, K)
+  sc <- cppo_score_test(X, Yidx, 1L, G, K, red)                    # expected information
+  sc_obs <- cppo_score_test(X, Yidx, 1L, G, K, red, info = "observed")
+  res <- fxn_cppo(dat, test_dat, levels_y)
+
+  out <- bind_rows(out, tibble(
+    i = i, n_empty_levels = dg$n_empty_levels, cell_dep_exp = dg$cell_dep_exp, cell_dep_unexp = dg$cell_dep_unexp,
+    score_stat = sc$stat, score_p = sc$p, nuis = sc$max_nuisance_score,
+    score_obs_stat = sc_obs$stat, score_obs_p = sc_obs$p, red_boundary = red$on_boundary,
+    lrt_stat = as.numeric(res$stat), lrt_p = as.numeric(res$p_value),
+    boundary = isTRUE(res$boundary), fit_ok = res$fit_ok,
+    fxn_score_p = res$p_value_score
+  ))
+  if (i %% 100 == 0) cat("  ...", i, "/", nsim, "\n")
+}
+saveRDS(out, sprintf("verification/cppo_score_check_%s_n%d_%d.rds", scenario, n, nsim))
+
+cat("\n=== 1. nuisance score at the reduced fit ===\n")
+cat(sprintf("  max |nuisance score| over draws: %.2e   (score components for b1, b2 are O(1)-O(10))\n", max(out$nuis)))
+cat(sprintf("  draws with the reduced fit on the boundary (score test returned NA by fxn_cppo): %d\n", sum(out$red_boundary)))
+reg <- out |> filter(!red_boundary)
+cat(sprintf("  max |nuisance score| among regular draws: %.2e\n", max(reg$nuis)))
+cat(sprintf("  fxn_cppo()$p_value_score == direct call on regular draws: %s\n",
+    isTRUE(all.equal(reg$fxn_score_p, reg$score_p))))
+
+cat("\n=== 2. rejection at alpha = 0.05 ===\n")
+se <- function(p, m) sqrt(p * (1 - p) / m)
+r_all <- reg |> summarize(m = n(), lrt = mean(lrt_p < alpha), score = mean(score_p < alpha), score_obs = mean(score_obs_p < alpha))
+cat(sprintf("  regular draws (%d):   LRT %.3f (se %.3f)   score[expected info] %.3f (se %.3f)   score[observed info] %.3f\n",
+    r_all$m, r_all$lrt, se(r_all$lrt, r_all$m), r_all$score, se(r_all$score, r_all$m), r_all$score_obs))
+r_b <- reg |> group_by(boundary) |> summarize(m = n(), lrt = mean(lrt_p < alpha), score = mean(score_p < alpha),
+                                              score_obs = mean(score_obs_p < alpha), .groups = "drop")
+for (k in seq_len(nrow(r_b))) cat(sprintf("  LRT boundary = %-5s (%d):  LRT %.3f   score[exp] %.3f   score[obs] %.3f   [diagnostic split, not a reported stratum]\n",
+    r_b$boundary[k], r_b$m[k], r_b$lrt[k], r_b$score[k], r_b$score_obs[k]))
+if (scenario == "null") {
+  ks <- suppressWarnings(ks.test(reg$score_stat, "pchisq", df = 2))
+  cat(sprintf("  KS test of score statistic [expected info] against chi-square_2: D = %.3f, p = %.3f\n", ks$statistic, ks$p.value))
+  ks2 <- suppressWarnings(ks.test(reg$lrt_stat, "pchisq", df = 2))
+  cat(sprintf("  KS test of LRT statistic against chi-square_2:                  D = %.3f, p = %.3f\n", ks2$statistic, ks2$p.value))
+}
+
+cat("\n=== 3. score vs LRT statistic, interior draws ===\n")
+int <- reg |> filter(!boundary)
+cat(sprintf("  interior draws: %d   median |score - LRT| = %.3f   median |score - LRT| / LRT = %.3f   max = %.3f\n",
+    nrow(int), median(abs(int$score_stat - int$lrt_stat)),
+    median(abs(int$score_stat - int$lrt_stat) / pmax(int$lrt_stat, 1e-8)),
+    max(abs(int$score_stat - int$lrt_stat))))

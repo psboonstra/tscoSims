@@ -36,8 +36,11 @@ fxn_tsco <- function(dat, test_dat, levels_y, cutoff_level, stage1, stage2) {
 
   # Both stage fits must have converged (rms::orm `$fail`, or VGAM iterations
   # below the ceiling). See aux_functions/fit_converged.R and review issue 12.
-  if (!fit_converged(fit_obj$fit)) {
-    return(null_fit(c(fit_obj$warnings, "tsco: a stage fit did not converge")))
+  conv_tags <- c(
+    convergence_failure_tag("tsco stage 1", fit_obj$fit$fit_stage1),
+    convergence_failure_tag("tsco stage 2", fit_obj$fit$fit_stage2))
+  if (length(conv_tags) > 0L) {
+    return(null_fit(c(fit_obj$warnings, conv_tags)))
   }
 
   # Since the 2026-09-17 package fix, tsco() warns and fits over the observed

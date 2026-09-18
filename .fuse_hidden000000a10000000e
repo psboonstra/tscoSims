@@ -143,12 +143,12 @@ if (all(c("tsco_commit", "tsco_dirty") %in% names(all_scores))) {
 # projection theta*_KL, so it is called `rps_at_kl_projection`, and the
 # difference is an ESTIMATION RESIDUAL -- how far the MLE's RPS sits from its
 # own target -- not an RPS approximation/estimation split. It is evaluated at
-# theta*_KL rather than minimized because thetahat converges to theta*_KL; at
-# the RPS minimizer the residual would converge to a positive constant instead
+# theta*_KL rather than minimised because thetahat converges to theta*_KL; at
+# the RPS minimiser the residual would converge to a positive constant instead
 # of zero. It CAN be negative in finite samples and is not clipped.
 #
 # NON-NEGATIVITY OF en_kl IS EXACT, NOT ASYMPTOTIC. theta*_KL was found by
-# minimizing KL on the SAME quadrature grid the replicates are scored on, and
+# minimising KL on the SAME quadrature grid the replicates are scored on, and
 # every accepted fit is a member of the class, so kl >= A_kl holds for every
 # finite replicate. A negative value therefore means a bug -- projection not at
 # its optimum, a fit outside the class, or inconsistent grids -- and is a hard
@@ -208,12 +208,12 @@ saveRDS(scored, "summaries/all_scores_decomposed.rds")
 #
 # The three unconditional rows sum to one. `p_reject` is also the operating
 # characteristic of the rule "no test -> do not reject"; whether that is the
-# rule an analyst would follow is a modeling statement, so both it and the
+# rule an analyst would follow is a modelling statement, so both it and the
 # conditional rate are given and the reader chooses with the failure rate in
 # view. With the convergence checks in place `p_no_test` is 0 in every cell
 # seen so far, so the two coincide -- but the labels are now honest.
 #
-# KL is summarized by the median, since a single separated fit makes the mean
+# KL is summarised by the median, since a single separated fit makes the mean
 # infinite.
 summ <-
   scored %>%
@@ -353,7 +353,7 @@ if (have_reference) paired <-
     n_paired = n(),
     mean_diff = mean(diff),
     diff_mcse = safe_mean_mcse(diff),
-    # Negative favors `method` over the reference.
+    # Negative favours `method` over the reference.
     lower = mean_diff - 1.96 * diff_mcse,
     upper = mean_diff + 1.96 * diff_mcse,
     # Exact, no Monte Carlo error. For metric == "rps" this is the difference
@@ -386,7 +386,7 @@ if (!is.null(paired)) {
 #                            so the rate is not hostage to one hidden cutoff
 #   rejection_given_test_interior
 #                            P(reject | test computed, interior). CONDITIONAL
-#                            on a function of the outcome and labeled so; it
+#                            on a function of the outcome and labelled so; it
 #                            is not the method's size or power.
 #   rejection_given_test_boundary
 #                            P(reject | test computed, boundary), for
@@ -452,7 +452,7 @@ cat("\n--- regret decomposition (A_kl exact; rps_at_kl_projection is NOT min-RPS
 print(decomp)
 
 if (!is.null(paired)) {
-  cat("\n--- paired vs '", reference_method, "' (negative favors the method) ---\n", sep = "")
+  cat("\n--- paired vs '", reference_method, "' (negative favours the method) ---\n", sep = "")
   print(paired)
 }
 

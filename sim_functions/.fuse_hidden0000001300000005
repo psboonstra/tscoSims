@@ -5,11 +5,11 @@
 #
 # Three things are verified:
 #   1. every DGM sits exactly on BASELINE_PROBS at A = 0, W = 0;
-#   2. the PO, CPPO and TsCO parameterizations reproduce the manuscript's
+#   2. the PO, CPPO and TsCO parameterisations reproduce the manuscript's
 #      Tables 3 and 4 to the three decimals printed there;
 #   3. the implied MARGINAL distribution of each scenario is reported, because
 #      matching at W = 0 does not make the marginals match -- and it is the
-#      marginal that determines realized cell counts and hence separation.
+#      marginal that determines realised cell counts and hence separation.
 
 ok <- TRUE
 
@@ -123,7 +123,7 @@ BETA_W <<- old_beta_W
 
 cat("\n=== 5. implied marginal distributions (NOT the baseline) ===\n")
 cat("    Matching at W = 0 does not match the marginals. These are what drive\n")
-cat("    realized cell counts, and so separation and finite-sample behavior.\n\n")
+cat("    realised cell counts, and so separation and finite-sample behaviour.\n\n")
 
 set.seed(1)
 big <- make_covariates(400000)

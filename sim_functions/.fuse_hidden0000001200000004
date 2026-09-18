@@ -6,7 +6,7 @@
 # Every DGM shares one BASELINE distribution: the category probabilities at
 # A = 0, W = 0. Previously each DGM carried its own invented intercepts
 # (PO used c(1.4, 0.5, -0.4, -1.3), CPPO used c(1.6, 0.7, -0.2, -1.4), and the
-# TsCO DGM was parameterized separately again), so a difference between two
+# TsCO DGM was parameterised separately again), so a difference between two
 # scenarios confounded the structure of the treatment effect with a different
 # reference distribution. Now the intercepts of every DGM are DERIVED from a
 # single baseline vector, so scenarios differ only in how the treatment effect
@@ -14,10 +14,10 @@
 #
 # The baseline is the manuscript's pediatric ECMO example: the six-level
 # standard-of-care distribution {0.27, 0.06, 0.06, 0.11, 0.03, 0.47} for levels
-# 0 to 5. Outcome levels are therefore labeled "0" .. "5", matching the paper,
+# 0 to 5. Outcome levels are therefore labelled "0" .. "5", matching the paper,
 # so that `cutoff_level = "5"` here is literally the paper's P O|5|M R.
 #
-# Parameterizations are taken verbatim from the manuscript and reproduce its
+# Parameterisations are taken verbatim from the manuscript and reproduce its
 # Tables 3 and 4 to three decimal places (see check_dgm.R):
 #
 #   PO     Pr(Y >= k | Z)      = expit(a_k - b1 z)

@@ -49,7 +49,7 @@
 #
 # The procedure evaluated here is, precisely: CONSTRAINED-ML CPPO WITH THE
 # 2-DF LIKELIHOOD-RATIO TEST OF b1 = b2 = 0 AND chi-square_2 CALIBRATION. It is
-# a defined comparator, not "CPPO as practiced". Peterson and Harrell (1990,
+# a defined comparator, not "CPPO as practised". Peterson and Harrell (1990,
 # Section 3.2) test the association of a constrained variable with the response
 # by a TWO-DF WALD TEST of beta = 0, gamma = 0 -- the test most exposed to a
 # boundary MLE, since it needs the information matrix there. Their Section 3.1
@@ -198,7 +198,7 @@ cppo_vglm_valid <- function(fit, tol = 1e-10) {
 ## probabilities are used downstream, both of which are invariant to the
 ## choice of scale, so this need not match VGAM's coefficient convention.
 ##
-## PARAMETERIZATION (rewritten 2026-09-18, after external review)
+## PARAMETERISATION (rewritten 2026-09-18, after external review)
 ## ---------------------------------------------------------------
 ## The admissible region is a set of non-negativity constraints:
 ##
@@ -212,7 +212,7 @@ cppo_vglm_valid <- function(fit, tol = 1e-10) {
 ## The previous version wrote s_j = exp(d_j) and u = exp(t), which keeps every
 ## finite parameter admissible but makes the BOUNDARY unattainable: an empty
 ## outcome category has its MLE at s_j = 0 exactly, and exp() can only approach
-## that. The supremum then has no finite optimizer, BFGS "converges" wherever
+## that. The supremum then has no finite optimiser, BFGS "converges" wherever
 ## the objective goes numerically flat at a very negative d_j, and the reported
 ## optimum, likelihood and LRT depend on stopping tolerances. That is precisely
 ## the regime the direct fitter exists for, so it was unreliable exactly where
@@ -253,8 +253,8 @@ cppo_direct_probs_from_q <- function(q) {
 
 # Log-likelihood contribution. An empty category at an active bound has
 # probability exactly zero, which never enters because no observation sits
-# there; an OBSERVED category driven to zero is penalized through the floor,
-# and the optimizer moves away from it.
+# there; an OBSERVED category driven to zero is penalised through the floor,
+# and the optimiser moves away from it.
 .cppo_direct_ll <- function(pr, Yidx) {
   sum(log(pmax(pr[cbind(seq_along(Yidx), Yidx)], 1e-300)))
 }
@@ -303,7 +303,7 @@ cppo_direct_nll <- function(v, X, Yidx, a_col, G, M) {
   -D * q * (1 - q) / py
 }
 
-# Chain rule from (d nll / d alpha_j) to the spacing parameterization:
+# Chain rule from (d nll / d alpha_j) to the spacing parameterisation:
 # alpha_j = v_1 - sum_{l=2}^{j} v_l, so d/dv_1 = sum_j g_j and d/dv_l = -sum_{j>=l} g_j.
 .cppo_direct_alpha_to_v <- function(g_alpha) {
   M <- length(g_alpha)
@@ -442,7 +442,7 @@ po_direct_fit <- function(X, Yidx, K) {
 # Full (CPPO) model.
 #
 # Starts: the reduced-model solution with gamma = 0, i.e. u = s_M -- the full
-# nll there EQUALS the reduced nll, so any improvement the optimizer finds
+# nll there EQUALS the reduced nll, so any improvement the optimiser finds
 # makes the LRT statistic non-negative by construction -- plus a spread of u
 # values from the data-driven start. `red` may be passed in to avoid refitting.
 cppo_direct_fit <- function(X, Yidx, a_col, G, K, red = NULL) {
@@ -454,7 +454,7 @@ cppo_direct_fit <- function(X, Yidx, a_col, G, K, red = NULL) {
     red <- po_direct_fit(X[, -a_col, drop = FALSE], Yidx, K)
   }
 
-  # Reduced solution lifted into the full parameterization: beta_A = 0, u = s_M.
+  # Reduced solution lifted into the full parameterisation: beta_A = 0, u = s_M.
   red_par <- red$par
   beta_full <- numeric(p)
   beta_full[-a_col] <- red_par[(M + 1):(M + p - 1L)]
@@ -536,7 +536,7 @@ cppo_direct_fit <- function(X, Yidx, a_col, G, K, red = NULL) {
 ## statement of how much information the data carry about b2, not a
 ## calibration failure.
 ##
-## PARAMETERIZATION. The natural one, theta = (alpha_1..alpha_M, beta_W, b1,
+## PARAMETERISATION. The natural one, theta = (alpha_1..alpha_M, beta_W, b1,
 ## b2), with lin_ij = alpha_j - beta_W W_i - A_i (b1 + b2 G_j). No constraint
 ## transform is needed because nothing is fitted here: the null estimate is
 ## taken from po_direct_fit() and (b1, b2) are set to zero. The score S is the
@@ -566,7 +566,7 @@ cppo_direct_fit <- function(X, Yidx, a_col, G, K, red = NULL) {
 ## ---------------------------------------------------------------------------
 
 # Per-row gradient of the NEGATIVE log-likelihood in the natural
-# parameterization: an n x p matrix whose column sums are the gradient.
+# parameterisation: an n x p matrix whose column sums are the gradient.
 .cppo_natural_grad_rows <- function(theta, X, Yidx, a_col, w_cols, G, M) {
   alpha <- theta[1:M]
   beta_w <- theta[M + seq_along(w_cols)]
@@ -622,7 +622,7 @@ cppo_score_test <- function(X, Yidx, a_col, G, K, red,
     }
   } else {
     # Observed information: central-difference Hessian of the analytic
-    # gradient, symmetrized. Kept for the verification script's contrast; NOT
+    # gradient, symmetrised. Kept for the verification script's contrast; NOT
     # used by the simulation -- see the note above.
     h <- 1e-5 * pmax(1, abs(theta0))
     H <- matrix(NA_real_, p, p)
@@ -838,12 +838,12 @@ fxn_cppo <- function(dat, test_dat, levels_y,
     return(null_fit(c(warnings, "cppo: direct fit failed")))
   }
 
-  # A non-converged optimizer has not established the constrained maximum, so
+  # A non-converged optimiser has not established the constrained maximum, so
   # neither the likelihood nor the predictions can be trusted. This is a
   # failure of the fit, reported as such (review issue 5).
   if (!full$converged || !red$converged) {
     return(null_fit(c(warnings, sprintf(
-      "cppo: direct optimizer did not converge (full: code %d, KKT %.2e, min obs prob %.2e; reduced: code %d, KKT %.2e, min obs prob %.2e)",
+      "cppo: direct optimiser did not converge (full: code %d, KKT %.2e, min obs prob %.2e; reduced: code %d, KKT %.2e, min obs prob %.2e)",
       full$optim_code, full$kkt_max_violation, full$min_obs_prob,
       red$optim_code, red$kkt_max_violation, red$min_obs_prob))))
   }

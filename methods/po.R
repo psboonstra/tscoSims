@@ -29,8 +29,10 @@ fxn_po <- function(dat, test_dat, levels_y) {
   # is a failure of the fitter and is reported as one; in 300 surveyed draws at
   # n = 200 it did not occur, so this guards a rare event rather than reshaping
   # the denominator.
-  if (!fit_converged(fit_full$fit) || !fit_converged(fit_red$fit)) {
-    return(null_fit(c(warnings, "po: VGAM did not converge")))
+  conv_tags <- c(convergence_failure_tag("po", fit_full$fit),
+                 convergence_failure_tag("po", fit_red$fit))
+  if (length(conv_tags) > 0L) {
+    return(null_fit(c(warnings, unique(conv_tags))))
   }
 
   tst <- vglm_lrt(fit_full$fit, fit_red$fit)

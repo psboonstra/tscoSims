@@ -2,7 +2,7 @@
 #
 # WHY THESE COLUMNS EXIST
 # -----------------------
-# Finite-sample behavior in this study is driven by empty cells, and the rate
+# Finite-sample behaviour in this study is driven by empty cells, and the rate
 # is not a footnote. Measured over 4000 draws per cell:
 #
 #   category 4 empty in...        exposed   unexposed   either   BOTH arms
@@ -32,7 +32,7 @@
 # of the very effect under test, so splitting operating characteristics on it
 # conditions on a post-treatment variable. See process_main_results.R.
 #
-# The columns generalize past category 4 and past K = 6: they are counts of
+# The columns generalise past category 4 and past K = 6: they are counts of
 # empty cells and minima, plus the two counts for the departure category, which
 # is the one CPPO's G singles out.
 

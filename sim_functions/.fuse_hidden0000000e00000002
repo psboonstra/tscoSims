@@ -1,14 +1,14 @@
 # Scores one fitted method against the truth on the evaluation set. Every
 # metric reported by the simulation is defined here and nowhere else.
 #
-# `fit` is the standardized list returned by any methods/*.R function:
+# `fit` is the standardised list returned by any methods/*.R function:
 #   fit_ok   (logical)      the model(s) were fit without error
 #   p_hat    (matrix or NA) predicted probabilities on test_dat
 #   stat, df, p_value       likelihood-ratio test of the A effect
 #   warnings (character)    warnings raised while fitting
 #
 # Because p_true is known, every metric below is an *excess risk* relative to
-# the oracle, estimated directly rather than through realized outcomes:
+# the oracle, estimated directly rather than through realised outcomes:
 #
 #   sum_k (p_hat_k - p_k)^2            = excess Brier risk
 #   sum_k (F_hat(k) - F(k))^2          = excess ranked probability score
@@ -75,7 +75,7 @@ prob_mae <- function(p_hat, p_true, wt = NULL) {
 # truth gives positive probability has infinite excess log risk, and that is
 # the honest answer: flooring at some eps replaces the infinity with a large
 # number that is a pure function of eps, which then dominates any average
-# taken over replicates. Summarize this column with the median and report how
+# taken over replicates. Summarise this column with the median and report how
 # often it is infinite.
 prob_kl <- function(p_hat, p_true, wt = NULL) {
   p_hat <- as.matrix(p_hat)
@@ -96,7 +96,7 @@ score_method <- function(fit, p_true, alpha = 0.05, wt = NULL) {
   # still contribute to the rejection rate.
   fit_ok <- isTRUE(fit$fit_ok)
   # A prediction is only a prediction if it is a valid probability matrix of
-  # the right shape and labeling; see valid_prob_matrix() in
+  # the right shape and labelling; see valid_prob_matrix() in
   # aux_functions/align_prob.R. `is.matrix()` alone let malformed output
   # through (review issue 10).
   pred_ok <- valid_prob_matrix(fit$p_hat, p_true)

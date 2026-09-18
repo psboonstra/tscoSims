@@ -77,7 +77,7 @@ for (cc in cols) {
   all_ok <- all_ok && ok
 }
 
-cat("\n=== methods_seq validation (new behavior) ===\n")
+cat("\n=== methods_seq validation (new behaviour) ===\n")
 source("sim_functions/method_setup.R")
 ml <- build_method_list(as.character(0:5), "5")
 t1 <- tryCatch({ check_methods_seq(c("po", "tscopopo"), ml); "no error" },

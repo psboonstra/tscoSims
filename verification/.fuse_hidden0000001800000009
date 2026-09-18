@@ -33,7 +33,7 @@ sys.source("verification/cppo_fitter_pre_20260918.R", envir = old)
 ## ---------------------------------------------------------------------------
 ## 0. ANALYTIC GRADIENTS AGAINST FINITE DIFFERENCES -- a hard assertion.
 ##
-## The optimizer and the KKT check both use the analytic gradient, so they
+## The optimiser and the KKT check both use the analytic gradient, so they
 ## cannot vouch for each other; only a finite-difference comparison is
 ## independent. Random interior points, points with one or both bounds active,
 ## several datasets, both models. Fails loudly rather than reporting.
@@ -105,7 +105,7 @@ for (i in 1:nsim) {
   t_new <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
 
   # KKT re-checked with the NUMERICAL gradient, so the verdict does not depend
-  # on the same code the optimizer used.
+  # on the same code the optimiser used.
   lower_f <- c(-Inf, rep(0, M - 1L), rep(-Inf, 2L), 0)
   kkt_num <- .cppo_kkt(function(v, ...) .cppo_num_grad(cppo_direct_nll, v, lower_f, ...),
                        full_new$par, lower_f, n = n,

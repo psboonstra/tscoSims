@@ -10,7 +10,7 @@
 # the replicate left the denominator unannounced, and only `cppo` tagged it.
 # Since the 2026-09-17 tsco fix the package itself warns and fits over the
 # observed levels, so `tsco_*` now behaves like the others; the tag below
-# normalizes the wording so all four are greppable the same way.
+# normalises the wording so all four are greppable the same way.
 
 #' Declared outcome levels with no observations in `dat`.
 unobserved_levels <- function(dat, levels_y) {

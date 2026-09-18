@@ -30,7 +30,7 @@ n_seq = 200 ; #c(200, 500, 1000)
 reps_per_array = 200
 sims_per_scenario = reps_per_array * 1
 
-# Outcome levels are labeled 0..5 to match the manuscript, so `cutoff_level`
+# Outcome levels are labelled 0..5 to match the manuscript, so `cutoff_level`
 # here is literally the paper's C: "5" gives the P O|5|M R of Table 3. Note
 # that with C = "5" the upper partition holds a single level, so tsco_pomr and
 # tsco_popo are the SAME model; use a smaller cutoff to separate them.
@@ -119,7 +119,7 @@ for (i in 1:n_sim) {
   source("sim_functions/draw_single_dataset.R")
 
   # Sparsity of THIS dataset, recorded once and attached to every method's row.
-  # Empty cells drive the finite-sample behavior and the rate is scenario
+  # Empty cells drive the finite-sample behaviour and the rate is scenario
   # specific -- 64% of cppo_alt draws at n = 200 have an empty exposed-arm
   # departure cell. See sim_functions/dataset_diagnostics.R.
   curr_diag <- dataset_diagnostics(dat, levels_y)

@@ -35,14 +35,14 @@
 #     E_X[KL(p||q_theta)] = E_X[ sum_k p_k(X) log p_k(X) ]      (no theta in it)
 #                         - E_X[ sum_k p_k(X) log q_k(X;theta) ]
 #
-# The first term does not involve theta, so minimizing KL is the same as
-# maximizing the second term, the POPULATION expected log-likelihood. And the
+# The first term does not involve theta, so minimising KL is the same as
+# maximising the second term, the POPULATION expected log-likelihood. And the
 # second term is a weighted multinomial log-likelihood: if we lay out one row
 # per (covariate value, outcome category) and attach the prior weight
 #
 #     wt = Pr(A = a) * (quadrature weight for w) * p_k(a, w)
 #
-# then a standard weighted fit maximizes precisely E_X[sum_k p_k log q_k].
+# then a standard weighted fit maximises precisely E_X[sum_k p_k log q_k].
 #
 # So theta* is obtained by handing that weighted pseudo-dataset to the SAME
 # fitter the method itself uses -- VGAM for PO/MR/CPPO, tsco::tsco for TsCO,
@@ -66,7 +66,7 @@
 # The MLE targets the KL projection, so A must be defined in KL if E_n is to be
 # non-negative. If the headline accuracy comparison is run in RPS, the matching
 # baseline is the RPS risk EVALUATED AT theta*, not the minimum of RPS over the
-# class. Minimizing RPS over the class would give a smaller number, and
+# class. Minimising RPS over the class would give a smaller number, and
 # R_n - A_RPS would then converge to a positive constant instead of zero.
 # `kl_projection()` therefore returns `rps` and `brier` alongside `kl`, all
 # evaluated at the same theta*.
@@ -241,7 +241,7 @@ kl_fitters <- function(levels_y, cutoff_level) {
 #
 # Returns the three risks at theta* -- `kl` is A(M); `rps` and `brier` are the
 # baselines to subtract when the headline comparison is run in those scores,
-# evaluated AT theta* rather than minimized in their own right (see the scoring
+# evaluated AT theta* rather than minimised in their own right (see the scoring
 # trap above). `q_star` is the projected distribution on the grid, kept so that
 # callers can inspect where the class fails rather than only by how much.
 # `p_true_fn` overrides the scenario lookup: a function of the grid returning an

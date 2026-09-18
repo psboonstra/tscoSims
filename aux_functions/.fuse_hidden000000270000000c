@@ -1,6 +1,6 @@
 # Did the backend converge? `safe_fit()` only distinguishes a thrown error from
 # a returned object, and every backend here will happily return an object
-# whose optimizer gave up (review issue 12). This asks each one the question
+# whose optimiser gave up (review issue 12). This asks each one the question
 # it can answer:
 #
 #   rms::orm     `$fail`: TRUE when the Newton iterations failed.

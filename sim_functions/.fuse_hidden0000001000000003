@@ -3,7 +3,7 @@
 # WHY THIS FILE EXISTS
 # --------------------
 # Every method in this study has the SAME signature: it takes a training set
-# and an evaluation set and returns the standardized list that score_method()
+# and an evaluation set and returns the standardised list that score_method()
 # consumes. The only thing that differs between methods is which fxn_* to call
 # and what tuning arguments to pass it. So the per-method blocks in run_sims.R
 # were five near-identical twelve-line copies whose only distinguishing content

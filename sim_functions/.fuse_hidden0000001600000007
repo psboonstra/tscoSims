@@ -40,7 +40,7 @@
 # ~8x faster per replicate (80 rows against 20,000), which matters across a
 # 6 x 3 x 5 design.
 #
-# `eval_by = "mc"` keeps the old behavior, for checking the two against each
+# `eval_by = "mc"` keeps the old behaviour, for checking the two against each
 # other. It is not the route to report.
 #
 # Nothing here touches the hypothesis test: stat, df, p_value and reject come
