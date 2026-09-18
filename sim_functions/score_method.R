@@ -138,7 +138,14 @@ score_method <- function(fit, p_true, alpha = 0.05, wt = NULL) {
     stat_score = if (is.null(fit$stat_score)) NA_real_ else as.numeric(fit$stat_score),
     p_value_score = p_value_score,
     test_ok_score = test_ok_score,
-    reject_score = test_ok_score && p_value_score < alpha
+    reject_score = test_ok_score && p_value_score < alpha,
+    # Score-test diagnostics: smallest eigenvalue and condition number of the
+    # efficient information, condition number of the nuisance block, and the
+    # per-observation nuisance score (should be ~0 at an interior reduced fit).
+    score_min_eig_eff = if (is.null(fit$score_min_eig_eff)) NA_real_ else as.numeric(fit$score_min_eig_eff),
+    score_cond_eff = if (is.null(fit$score_cond_eff)) NA_real_ else as.numeric(fit$score_cond_eff),
+    score_cond_nuis = if (is.null(fit$score_cond_nuis)) NA_real_ else as.numeric(fit$score_cond_nuis),
+    score_nuis_per_n = if (is.null(fit$score_nuis_per_n)) NA_real_ else as.numeric(fit$score_nuis_per_n)
   )
 }
 

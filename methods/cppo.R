@@ -544,20 +544,34 @@ cppo_direct_fit <- function(X, Yidx, a_col, G, K, red = NULL) {
 ## zero up to the reduced fit's convergence. Statistic = S' I^-1 S, referred
 ## to chi-square_2.
 ##
-## EXPECTED, NOT OBSERVED, INFORMATION -- and why it matters here. The b2 score
-## for an exposed row is +(1 - q_M) if Y is the top category and
-## -q_M(1 - q_M)/p_4 if Y is the departure category, zero otherwise; these
-## cancel in expectation. The departure category has probability ~0.03, so its
-## contribution is RARE and LARGE. When the exposed departure cell is empty --
-## 11% of null draws at n = 200 -- the score keeps its many small positive
-## terms and loses its few large negative ones, and the OBSERVED information
-## (a Hessian at the data) loses the 1/p_4 term with them: the statistic came
-## out near 100 on every such draw (checked 2026-09-18), i.e. an
-## observed-information score test rejected 100% of the time exactly where
-## the LRT is on the boundary. The EXPECTED information,
-##     I = sum_i sum_k p_ik  g_ik g_ik',
-## averages over the outcome and so retains the 1/p_4 term whether or not the
-## cell was observed. That is the classical Rao form and the one used.
+## EXPECTED (FISHER) INFORMATION, as in the classical Rao score statistic,
+##     I = sum_i sum_k p_ik  g_ik g_ik'.
+## The observed-information version was numerically unstable in sparse cells
+## and is retained only as a diagnostic (`info = "observed"`). The mechanism,
+## for the record: the b2 score for an exposed row is +(1 - q_M) if Y is the
+## top category and -q_M(1 - q_M)/p_4 if Y is the departure category (p_4 ~
+## 0.03), zero otherwise, and these cancel in expectation. When the exposed
+## departure cell is empty -- 11% of null draws at n = 200 -- the score keeps
+## its many small positive terms and loses its few large negative ones, and the
+## observed Hessian loses the 1/p_4 term with them; the statistic came out near
+## 100 on every such draw. The expected information retains that term whether
+## or not the cell was observed. None of this makes the expected-information
+## statistic well calibrated BY ARGUMENT: the score is a sum of a common small
+## term and a rare large one and is therefore skewed at n = 200, and Peterson
+## and Harrell (1990, Section 7) report erroneous score-test behavior with
+## empty or sparse cells and near-singular information. The type I error
+## simulation is what establishes calibration in this design (0.050, SE 0.011,
+## at n = 200 under the null; KS p = 0.24 against chi-square_2).
+##
+## THE EFFICIENT SCORE FORM. With theta = (lambda, psi), lambda the nuisance
+## (cutpoints, beta_W) and psi = (b1, b2), the statistic is
+##     U' I_eff^-1 U,   U = S_psi,   I_eff = I_pp - I_pl I_ll^-1 I_lp,
+## the Schur complement. At the restricted MLE S_lambda = 0, so this equals
+## S' I^-1 S with the full vector; the Schur form is used because it states the
+## 2-df test directly, does not lean on S_lambda vanishing to numerical
+## precision, and exposes I_ll and I_eff for the diagnostics below. A
+## rank-deficient or numerically singular I_eff -- the sparse-data failure
+## Peterson and Harrell describe -- returns NO test rather than a forced solve.
 ##
 ## REGULARITY OF THE NULL FIT. If a level is unobserved in BOTH arms the
 ## reduced fit itself is on the boundary (a spacing at zero) and the score is
@@ -635,20 +649,52 @@ cppo_score_test <- function(X, Yidx, a_col, G, K, red,
     H <- (H + t(H)) / 2
   }
 
-  stat <- tryCatch(drop(crossprod(S, solve(H, S))), error = function(e) NA_real_)
-  if (is.finite(stat) && stat < 0 && stat > -1e-7) stat <- 0
+  idx_nuis <- seq_len(p - 2L)
+  idx_test <- (p - 1L):p
+  U <- S[idx_test]
 
-  list(
+  # Efficient information by Schur complement, with a guard on I_ll first: a
+  # singular nuisance block means the reduced model itself is degenerate.
+  diag_na <- list(min_eig_nuis = NA_real_, cond_nuis = NA_real_,
+                  min_eig_eff = NA_real_, cond_eff = NA_real_, rank_eff = NA_integer_)
+  I_eff <- NULL
+  if (all(is.finite(H))) {
+    I_ll <- H[idx_nuis, idx_nuis, drop = FALSE]
+    e_ll <- eigen(I_ll, symmetric = TRUE, only.values = TRUE)$values
+    diag_na$min_eig_nuis <- min(e_ll)
+    diag_na$cond_nuis <- max(e_ll) / max(min(e_ll), .Machine$double.eps)
+    if (min(e_ll) > 1e-10 * max(e_ll)) {
+      I_eff <- H[idx_test, idx_test, drop = FALSE] -
+        H[idx_test, idx_nuis, drop = FALSE] %*% solve(I_ll, H[idx_nuis, idx_test, drop = FALSE])
+      I_eff <- (I_eff + t(I_eff)) / 2
+      e_eff <- eigen(I_eff, symmetric = TRUE, only.values = TRUE)$values
+      diag_na$min_eig_eff <- min(e_eff)
+      diag_na$cond_eff <- max(e_eff) / max(min(e_eff), .Machine$double.eps)
+      diag_na$rank_eff <- sum(e_eff > 1e-10 * max(e_eff))
+    }
+  }
+
+  # No test unless I_eff is positive definite to a relative tolerance of 1e-10.
+  stat <- NA_real_
+  if (!is.null(I_eff) && isTRUE(diag_na$rank_eff == 2L) && diag_na$min_eig_eff > 0) {
+    stat <- drop(crossprod(U, solve(I_eff, U)))
+    if (is.finite(stat) && stat < 0 && stat > -1e-7) stat <- 0
+  }
+
+  c(list(
     stat = stat,
     df = 2,
     p = if (is.finite(stat)) stats::pchisq(stat, df = 2, lower.tail = FALSE) else NA_real_,
     score = S,
+    U = U,
+    I_eff = I_eff,
     info = info,
-    # Diagnostic: the nuisance score is ~0 iff the reduced fit is an interior
-    # optimum. Large values mean the reduced fit is on the boundary.
-    max_nuisance_score = max(abs(S[seq_len(p - 2L)])),
-    info_ok = is.finite(stat) && all(is.finite(H))
-  )
+    # The nuisance score is ~0 iff the reduced fit is an interior optimum; large
+    # values mean it is on the boundary. Per observation, so comparable across n.
+    max_nuisance_score = max(abs(S[idx_nuis])),
+    max_nuisance_score_per_n = max(abs(S[idx_nuis])) / n,
+    info_ok = is.finite(stat)
+  ), diag_na)
 }
 
 cppo_direct_predict <- function(fit, X, a_col, G) {
@@ -730,7 +776,14 @@ fxn_cppo <- function(dat, test_dat, levels_y,
   }
   score_fields <- list(
     stat_score = if (is.null(score)) NA_real_ else score$stat,
-    p_value_score = if (is.null(score)) NA_real_ else score$p
+    p_value_score = if (is.null(score)) NA_real_ else score$p,
+    # Per-replicate diagnostics for the score test (review, 2026-09-18):
+    # a finite statistic from a nearly singular efficient information matrix is
+    # exactly the sparse-data failure to watch for.
+    score_min_eig_eff = if (is.null(score)) NA_real_ else score$min_eig_eff,
+    score_cond_eff = if (is.null(score)) NA_real_ else score$cond_eff,
+    score_cond_nuis = if (is.null(score)) NA_real_ else score$cond_nuis,
+    score_nuis_per_n = if (is.null(score)) NA_real_ else score$max_nuisance_score_per_n
   )
   if (is.null(score)) warnings <- c(warnings, score_tag)
 

@@ -304,9 +304,14 @@ kl_projection_table <- function(scenarios, methods, levels_y, cutoff_level = "5"
 # whatever evaluation set the simulation used, so R_n carries Monte Carlo error
 # from that set while A does not; use a large test set or the grid itself.
 #
-# Non-negativity is guaranteed in the population but NOT replicate by replicate
-# when R_n is estimated on a finite test set: a lucky draw can put R_n a little
-# below A. Report the sign of the minimum as a diagnostic rather than clipping.
+# Non-negativity of E_n depends on HOW R_n is evaluated. With the deterministic
+# quadrature grid (eval_by = "grid", the pipeline default) A and R_n are the
+# same functional on the same grid and every accepted fit lies in the class, so
+# E_n >= 0 holds EXACTLY for every replicate -- process_main_results.R treats a
+# negative value as a validation failure. With a random Monte Carlo test set
+# (eval_by = "mc", wt = NULL) R_n carries sampling error that A does not, and a
+# lucky draw can put R_n a little below A. This helper supports both; the
+# non-negativity guarantee belongs to the first.
 kl_regret <- function(p_hat, p_true, A_kl, wt = NULL) {
   if (is.null(wt)) wt <- rep(1 / nrow(as.matrix(p_true)), nrow(as.matrix(p_true)))
   R_n <- expected_kl(p_true, p_hat, wt)
